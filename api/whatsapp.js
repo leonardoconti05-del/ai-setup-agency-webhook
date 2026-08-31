@@ -51,7 +51,7 @@ Rispondi SOLO con il messaggio da inviare al paziente. Italiano naturale, senza 
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5'
         max_tokens: 500,
         system: SYSTEM_PROMPT,
         messages: history,
@@ -71,7 +71,7 @@ Rispondi SOLO con il messaggio da inviare al paziente. Italiano naturale, senza 
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5'
         max_tokens: 300,
         system: EXTRACTION_PROMPT,
         messages: [{ role: 'user', content: JSON.stringify(history) }],
