@@ -14,6 +14,25 @@ function sendTwiml(res, message) {
   );
 }
 
+async function notificaStaff(fields, telefono, urgente = false) {
+  try {
+    const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) return;
+
+    const prefix = urgente ? '🚨 URGENTE' : '📋 Nuova richiesta';
+    const testo = `${prefix}\nNome: ${fields.nome || '?'}\nMotivo: ${fields.motivo || '?'}\nTel: ${telefono}\nDisponibilità: ${fields.disponibilita || '?'}\nPaziente: ${fields.tipo_paziente || '?'}`;
+
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: testo }),
+    });
+  } catch (e) {
+    console.error('Errore notifica Telegram:', e);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).send('Metodo non permesso');
@@ -132,6 +151,11 @@ Rispondi SOLO con il messaggio da inviare al paziente. Italiano naturale, senza 
       fields = JSON.parse(rawJson.replace(/```json|```/g, '').trim());
     } catch (e) {
       console.error('Errore estrazione campi:', e);
+    }
+
+    // 3bis. Notifica lo staff su Telegram (urgente se serve, altrimenti notifica standard)
+    if (fields.nome || fields.motivo) {
+      await notificaStaff(fields, telefono, fields.urgenza === 'alta');
     }
 
     // 4. Salva/aggiorna lo storico della conversazione
