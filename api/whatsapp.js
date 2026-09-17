@@ -116,10 +116,11 @@ export default async function handler(req, res) {
       { headers }
     );
     const configData = await configRes.json();
+    console.log('DEBUG configRes status:', configRes.status, 'DEBUG configData:', JSON.stringify(configData));
     const config = Array.isArray(configData) ? configData[0] : null;
 
     if (!config) {
-      console.error('Nessuna configurazione per il numero:', toRaw);
+      console.error('Nessuna configurazione per il numero:', toRaw, 'Risposta Supabase:', JSON.stringify(configData));
       return sendTwiml(res, 'Servizio momentaneamente non disponibile. Riprova più tardi.');
     }
 
