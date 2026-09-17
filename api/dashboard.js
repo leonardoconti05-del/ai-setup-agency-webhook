@@ -7,7 +7,7 @@ function escapeHtml(text) {
 }
 
 export default async function handler(req, res) {
-  const { cliente_id, password } = req.query;
+  const { cliente_id, password, action, numero_utente, nuovo_stato } = req.query;
 
   const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
   if (!DASHBOARD_PASSWORD || password !== DASHBOARD_PASSWORD) {
@@ -23,11 +23,26 @@ export default async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const headers = {
+    'Content-Type': 'application/json',
     apikey: SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_KEY}`,
   };
 
   try {
+    // Se arriva un'azione di cambio stato, aggiorna e poi redirect alla pagina pulita
+    if (action === 'set_stato' && numero_utente && nuovo_stato) {
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&numero_utente=eq.${encodeURIComponent(numero_utente)}`,
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ stato: nuovo_stato, updated_at: new Date().toISOString() }),
+        }
+      );
+      res.writeHead(302, { Location: `/api/dashboard?cliente_id=${encodeURIComponent(cliente_id)}&password=${encodeURIComponent(password)}` });
+      return res.end();
+    }
+
     // Info cliente
     const clienteRes = await fetch(
       `${SUPABASE_URL}/rest/v1/clienti?id=eq.${encodeURIComponent(cliente_id)}&select=nome_attivita`,
@@ -42,23 +57,43 @@ export default async function handler(req, res) {
       { headers }
     );
     const richieste = await richiesteRes.json();
+    const lista = Array.isArray(richieste) ? richieste : [];
 
-    const righe = (Array.isArray(richieste) ? richieste : [])
+    const contaTotali = lista.length;
+    const contaUrgenti = lista.filter((r) => r.stato === 'urgente').length;
+    const contaInCorso = lista.filter((r) => r.stato === 'in_corso').length;
+    const contaCompletate = lista.filter((r) => r.stato === 'completata').length;
+
+    const statoBadge = {
+      urgente: { colore: '#dc2626', bg: '#fef2f2', label: '🚨 Urgente' },
+      completata: { colore: '#16a34a', bg: '#f0fdf4', label: '✅ Completata' },
+      in_corso: { colore: '#d97706', bg: '#fffbeb', label: '⏳ In corso' },
+    };
+
+    const azioneBottone = (num, stato, label) => {
+      const url = `/api/dashboard?cliente_id=${encodeURIComponent(cliente_id)}&password=${encodeURIComponent(password)}&action=set_stato&numero_utente=${encodeURIComponent(num)}&nuovo_stato=${encodeURIComponent(stato)}`;
+      return `<a href="${url}" class="btn-stato">${label}</a>`;
+    };
+
+    const righe = lista
       .map((r) => {
         const dati = r.dati_raccolti || {};
         const campiDati = Object.entries(dati)
           .filter(([k]) => k !== 'urgente')
-          .map(([k, v]) => `<b>${escapeHtml(k)}:</b> ${escapeHtml(v)}`)
-          .join('<br>');
-        const statoColore = r.stato === 'urgente' ? '#fee2e2' : r.stato === 'completata' ? '#dcfce7' : '#fef9c3';
-        const statoTesto = r.stato === 'urgente' ? '🚨 Urgente' : r.stato === 'completata' ? '✅ Completata' : '⏳ In corso';
-        const data = r.updated_at ? new Date(r.updated_at).toLocaleString('it-IT') : '';
+          .map(([k, v]) => `<div class="campo"><span class="campo-nome">${escapeHtml(k)}</span>${escapeHtml(v)}</div>`)
+          .join('');
+        const badge = statoBadge[r.stato] || statoBadge.in_corso;
+        const data = r.updated_at ? new Date(r.updated_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
 
-        return `<tr style="background:${statoColore}">
-          <td style="padding:10px;border:1px solid #ddd">${statoTesto}</td>
-          <td style="padding:10px;border:1px solid #ddd">${campiDati || '<i>nessun dato</i>'}</td>
-          <td style="padding:10px;border:1px solid #ddd">${escapeHtml(r.numero_utente)}</td>
-          <td style="padding:10px;border:1px solid #ddd">${data}</td>
+        return `<tr>
+          <td><span class="badge" style="background:${badge.bg};color:${badge.colore}">${badge.label}</span></td>
+          <td>${campiDati || '<i style="color:#9ca3af">nessun dato</i>'}</td>
+          <td><a href="tel:${escapeHtml(r.numero_utente)}" class="telefono">${escapeHtml(r.numero_utente)}</a></td>
+          <td class="data-col">${data}</td>
+          <td class="azioni">
+            ${azioneBottone(r.numero_utente, 'in_corso', 'In corso')}
+            ${azioneBottone(r.numero_utente, 'completata', 'Completata')}
+          </td>
         </tr>`;
       })
       .join('');
@@ -68,21 +103,110 @@ export default async function handler(req, res) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="30">
   <title>Dashboard — ${escapeHtml(nomeAttivita)}</title>
   <style>
-    body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 15px; background: #f9fafb; }
-    h1 { color: #1f2937; }
-    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    th { background: #1f2937; color: white; padding: 10px; text-align: left; }
-    .empty { text-align: center; padding: 40px; color: #6b7280; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 { font-size: 24px; margin: 0; color: #111827; }
+    .sottotitolo { color: #6b7280; font-size: 14px; margin-top: 4px; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat-card {
+      background: white;
+      border-radius: 10px;
+      padding: 14px 18px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      text-align: center;
+      min-width: 90px;
+    }
+    .stat-num { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: #111827;
+      color: white;
+      padding: 12px 16px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    td { padding: 14px 16px; border-bottom: 1px solid #f0f1f3; font-size: 14px; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: #fafafa; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .campo { margin-bottom: 4px; font-size: 13px; }
+    .campo-nome { color: #6b7280; margin-right: 6px; }
+    .campo-nome::after { content: ':'; }
+    .telefono { color: #2563eb; text-decoration: none; }
+    .telefono:hover { text-decoration: underline; }
+    .data-col { color: #6b7280; font-size: 13px; white-space: nowrap; }
+    .azioni { white-space: nowrap; }
+    .btn-stato {
+      display: inline-block;
+      font-size: 12px;
+      padding: 5px 10px;
+      margin-right: 6px;
+      border-radius: 6px;
+      border: 1px solid #d1d5db;
+      color: #374151;
+      text-decoration: none;
+      background: #f9fafb;
+    }
+    .btn-stato:hover { background: #f3f4f6; border-color: #9ca3af; }
+    .empty { text-align: center; padding: 50px 20px; color: #9ca3af; }
+    footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 20px; }
   </style>
 </head>
 <body>
-  <h1>📋 Richieste — ${escapeHtml(nomeAttivita)}</h1>
-  <table>
-    <tr><th>Stato</th><th>Dati raccolti</th><th>Telefono</th><th>Ultimo aggiornamento</th></tr>
-    ${righe || '<tr><td colspan="4" class="empty">Nessuna richiesta ancora ricevuta.</td></tr>'}
-  </table>
+  <header>
+    <div>
+      <h1>📋 ${escapeHtml(nomeAttivita)}</h1>
+      <div class="sottotitolo">Richieste ricevute via WhatsApp</div>
+    </div>
+    <div class="stats">
+      <div class="stat-card"><div class="stat-num">${contaTotali}</div><div class="stat-label">Totali</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#dc2626">${contaUrgenti}</div><div class="stat-label">Urgenti</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#d97706">${contaInCorso}</div><div class="stat-label">In corso</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#16a34a">${contaCompletate}</div><div class="stat-label">Completate</div></div>
+    </div>
+  </header>
+  <div class="card">
+    ${lista.length > 0 ? `<table>
+      <tr><th>Stato</th><th>Dati raccolti</th><th>Telefono</th><th>Aggiornato</th><th>Azioni</th></tr>
+      ${righe}
+    </table>` : '<div class="empty">Nessuna richiesta ancora ricevuta.</div>'}
+  </div>
+  <footer>Aggiornamento automatico ogni 30 secondi</footer>
 </body>
 </html>`;
 
