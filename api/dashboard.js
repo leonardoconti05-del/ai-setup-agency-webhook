@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       .map((r) => {
         const dati = r.dati_raccolti || {};
         const campiDati = Object.entries(dati)
-          .filter(([k]) => k !== 'urgente')
+          .filter(([k]) => k !== 'urgente' && !k.startsWith('_'))
           .map(([k, v]) => `<div class="campo"><span class="campo-nome">${escapeHtml(k)}</span>${escapeHtml(v)}</div>`)
           .join('');
         const badge = statoBadge[r.stato] || statoBadge.in_corso;
