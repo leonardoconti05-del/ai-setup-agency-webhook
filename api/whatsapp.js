@@ -123,7 +123,7 @@ async function creaEvento(calendarId, slot, riepilogoDati, nomeAttivita) {
   return res.json();
 }
 
-// ===== Prompt dinamici (dal precedente) =====
+// ===== Prompt dinamici =====
 function buildSystemPrompt(config, nomeAttivita) {
   const campi = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere : [];
   const listaCampi = campi.map((c, i) => `${i + 1}. ${c.campo}: ${c.domanda}`).join('\n');
@@ -156,8 +156,10 @@ function buildExtractionPrompt(config) {
   const campi = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere : [];
   const schema = campi.reduce((acc, c) => { acc[c.campo] = 'valore o null'; return acc; }, {});
   schema.urgente = 'true/false';
-  return `Estrai SOLO i dati esplicitamente forniti dal cliente nella conversazione. Rispondi SOLO con JSON valido:
-${JSON.stringify(schema)}`;
+  return `Estrai SOLO i dati esplicitamente forniti dal cliente in TUTTA la conversazione fornita.
+Rispondi SOLO con un singolo oggetto JSON valido con questa forma esatta (NON un array, NON più oggetti):
+${JSON.stringify(schema)}
+Se un campo non è stato menzionato, usa null. Non aggiungere altre chiavi oltre a quelle elencate.`;
 }
 
 async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false) {
@@ -216,6 +218,11 @@ export default async function handler(req, res) {
     const cliente_id = config.cliente_id;
     const nomeAttivita = config.clienti?.nome_attivita || 'la nostra attività';
 
+    // Campi previsti per questo cliente — usato sia per il prompt di estrazione
+    // sia per "sanificare" il risultato dell'estrazione più sotto.
+    const campiRichiesti = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere.map((c) => c.campo) : [];
+    const campiConsentiti = new Set([...campiRichiesti, 'urgente']);
+
     // 1. Recupera la richiesta esistente
     let history = [];
     let datiPrecedenti = {};
@@ -228,6 +235,14 @@ export default async function handler(req, res) {
       if (Array.isArray(richiestaData) && richiestaData[0]) {
         history = richiestaData[0].conversazione || [];
         datiPrecedenti = richiestaData[0].dati_raccolti || {};
+        // Pulizia difensiva: se dati_raccolti contiene "inquinamento" da un bug
+        // precedente (chiavi numeriche tipo "0","1","2" derivate da un array
+        // finito per errore dentro i dati), le scartiamo qui.
+        for (const k of Object.keys(datiPrecedenti)) {
+          if (!campiConsentiti.has(k) && !k.startsWith('_')) {
+            delete datiPrecedenti[k];
+          }
+        }
       }
     } catch (e) {
       console.error('Errore lettura richiesta esistente:', e);
@@ -292,6 +307,7 @@ export default async function handler(req, res) {
     let reply = chatData.content.find((b) => b.type === 'text')?.text || 'Mi scusi, può ripetere?';
     history.push({ role: 'assistant', content: reply });
 
+    // ===== Estrazione campi — con validazione anti-corruzione =====
     let datiNuovi = {};
     try {
       const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -301,7 +317,23 @@ export default async function handler(req, res) {
       });
       const extractData = await extractResponse.json();
       const rawJson = extractData.content?.find((b) => b.type === 'text')?.text || '{}';
-      datiNuovi = JSON.parse(rawJson.replace(/```json|```/g, '').trim());
+      const parsed = JSON.parse(rawJson.replace(/```json|```/g, '').trim());
+
+      // FIX: a volte il modello risponde con un array (o un oggetto annidato
+      // sotto chiavi numeriche) invece di un singolo oggetto piatto. Se ciò
+      // accade, scartiamo il risultato invece di fonderlo: uno spread di un
+      // array su un oggetto produce chiavi "0","1","2"... e NON sovrascrive
+      // i campi scalari esistenti (es. "urgente"), che quindi resterebbero
+      // bloccati per sempre sul primo valore ricevuto.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (campiConsentiti.has(k)) {
+            datiNuovi[k] = v;
+          }
+        }
+      } else {
+        console.error('Estrazione campi: formato inatteso (non un oggetto piatto):', rawJson);
+      }
     } catch (e) {
       console.error('Errore estrazione campi:', e);
     }
@@ -314,7 +346,6 @@ export default async function handler(req, res) {
       await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente);
     }
 
-    const campiRichiesti = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere.map((c) => c.campo) : [];
     const tuttiCompilati = campiRichiesti.length > 0 && campiRichiesti.every((c) => datiCombinati[c]);
 
     let stato = urgente ? 'urgente' : tuttiCompilati ? 'completata' : 'in_corso';
