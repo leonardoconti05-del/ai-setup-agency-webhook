@@ -155,14 +155,21 @@ FORMATO OUTPUT
 Rispondi SOLO con il messaggio da inviare al cliente. Italiano naturale, senza markdown.`;
 }
 
-function buildExtractionPrompt(config) {
+function buildExtractionTool(config) {
   const campi = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere : [];
-  const schema = campi.reduce((acc, c) => { acc[c.campo] = 'valore o null'; return acc; }, {});
-  schema.urgente = 'true/false';
-  return `Estrai SOLO i dati esplicitamente forniti dal cliente in TUTTA la conversazione fornita.
-Rispondi SOLO con un singolo oggetto JSON valido con questa forma esatta (NON un array, NON più oggetti):
-${JSON.stringify(schema)}
-Se un campo non è stato menzionato, usa null. Non aggiungere altre chiavi oltre a quelle elencate.`;
+  const properties = {};
+  for (const c of campi) {
+    properties[c.campo] = {
+      type: ['string', 'null'],
+      description: `Valore per "${c.campo}" (${c.domanda}), o null se non menzionato esplicitamente dal cliente.`,
+    };
+  }
+  properties.urgente = { type: 'boolean', description: 'true se la situazione è urgente secondo i criteri indicati, false altrimenti.' };
+  return {
+    name: 'estrai_dati',
+    description: 'Registra i dati esplicitamente forniti dal cliente in tutta la conversazione fornita.',
+    input_schema: { type: 'object', properties, required: [] },
+  };
 }
 
 async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false) {
@@ -185,12 +192,54 @@ async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = fal
   }
 }
 
+// ===== SICUREZZA: verifica che la richiesta arrivi davvero da Twilio =====
+// Twilio firma ogni richiesta con l'Auth Token dell'account (header
+// X-Twilio-Signature). Senza questo controllo, chiunque conosca l'URL
+// dell'endpoint può mandare richieste finte: far consumare credito
+// Anthropic, inserire dati falsi su Supabase, spammare Telegram.
+function validaFirmaTwilio(authToken, firmaRicevuta, urlCompleto, parametri) {
+  if (!firmaRicevuta) return false;
+  const chiaviOrdinate = Object.keys(parametri).sort();
+  let dati = urlCompleto;
+  for (const chiave of chiaviOrdinate) {
+    dati += chiave + parametri[chiave];
+  }
+  const hmac = crypto.createHmac('sha1', authToken);
+  hmac.update(Buffer.from(dati, 'utf-8'));
+  const firmaAttesa = hmac.digest('base64');
+  try {
+    const a = Buffer.from(firmaAttesa);
+    const b = Buffer.from(firmaRicevuta);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).send('Metodo non permesso');
   }
 
+  const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+  if (TWILIO_AUTH_TOKEN) {
+    const firmaRicevuta = req.headers['x-twilio-signature'];
+    const urlCompleto = `https://${req.headers.host}${req.url}`;
+    const parametriValidi = validaFirmaTwilio(TWILIO_AUTH_TOKEN, firmaRicevuta, urlCompleto, req.body || {});
+    if (!parametriValidi) {
+      console.error('Richiesta rifiutata: firma Twilio non valida o assente.');
+      return res.status(403).send('Forbidden');
+    }
+  } else {
+    // Nessun TWILIO_AUTH_TOKEN configurato: la richiesta viene comunque
+    // elaborata (per non rompere l'ambiente di test), ma va aggiunta questa
+    // variabile d'ambiente prima di andare in produzione con clienti reali.
+    console.error('ATTENZIONE: TWILIO_AUTH_TOKEN non configurato, richieste non verificate.');
+  }
+
   const body = req.body || {};
+  const messageSid = body.MessageSid || null;
   const messaggio = (body.Body || '').trim();
   const fromRaw = body.From || '';
   const toRaw = body.To || '';
@@ -229,15 +278,17 @@ export default async function handler(req, res) {
     // 1. Recupera la richiesta esistente
     let history = [];
     let datiPrecedenti = {};
+    let ultimoAggiornamento = null;
     try {
       const richiestaRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${cliente_id}&numero_utente=eq.${encodeURIComponent(telefono)}&select=conversazione,dati_raccolti`,
+        `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${cliente_id}&numero_utente=eq.${encodeURIComponent(telefono)}&select=conversazione,dati_raccolti,updated_at`,
         { headers }
       );
       const richiestaData = await richiestaRes.json();
       if (Array.isArray(richiestaData) && richiestaData[0]) {
         history = richiestaData[0].conversazione || [];
         datiPrecedenti = richiestaData[0].dati_raccolti || {};
+        ultimoAggiornamento = richiestaData[0].updated_at || null;
         // Pulizia difensiva: se dati_raccolti contiene "inquinamento" da un bug
         // precedente (chiavi numeriche tipo "0","1","2" derivate da un array
         // finito per errore dentro i dati), le scartiamo qui.
@@ -249,6 +300,31 @@ export default async function handler(req, res) {
       }
     } catch (e) {
       console.error('Errore lettura richiesta esistente:', e);
+    }
+    // FIX: scadenza conversazione. Se l'ultimo scambio risale a più di 48 ore
+    // fa, ripartiamo da zero invece di trascinare per sempre una cronologia
+    // vecchia (costo crescente ad ogni turno, e un cliente che riscrive dopo
+    // settimane non deve ritrovarsi in mezzo a una conversazione passata).
+    if (ultimoAggiornamento) {
+      const oreTrascorse = (Date.now() - new Date(ultimoAggiornamento).getTime()) / (1000 * 60 * 60);
+      if (oreTrascorse > 48) {
+        history = [];
+        datiPrecedenti = messageSid ? { _sids: [messageSid] } : {};
+      }
+    }
+
+    // FIX: deduplicazione. Twilio può ritrasmettere lo stesso messaggio (es.
+    // per timeout di rete) — senza questo controllo verrebbe elaborato due
+    // volte: doppia chiamata a Claude (costo raddoppiato), doppia notifica
+    // Telegram, possibile doppio conteggio nei dati raccolti. Teniamo gli
+    // ultimi ID messaggio già processati e ignoriamo i duplicati.
+    const sidsProcessati = Array.isArray(datiPrecedenti._sids) ? datiPrecedenti._sids : [];
+    if (messageSid && sidsProcessati.includes(messageSid)) {
+      console.error('Messaggio duplicato ignorato:', messageSid);
+      return sendTwiml(res, '');
+    }
+    if (messageSid) {
+      datiPrecedenti._sids = [...sidsProcessati, messageSid].slice(-20);
     }
 
     // ===== GESTIONE PRENOTAZIONE: se siamo in attesa che il cliente scelga uno slot =====
@@ -293,7 +369,7 @@ export default async function handler(req, res) {
     history.push({ role: 'user', content: messaggio });
 
     const SYSTEM_PROMPT = buildSystemPrompt(config, nomeAttivita);
-    const EXTRACTION_PROMPT = buildExtractionPrompt(config);
+    const EXTRACTION_TOOL = buildExtractionTool(config);
 
     const chatResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -310,32 +386,38 @@ export default async function handler(req, res) {
     let reply = chatData.content.find((b) => b.type === 'text')?.text || 'Mi scusi, può ripetere?';
     history.push({ role: 'assistant', content: reply });
 
-    // ===== Estrazione campi — con validazione anti-corruzione =====
+    // ===== Estrazione campi tramite tool-use forzato =====
+    // FIX ALLA RADICE: prima chiedevamo a Claude di scrivere JSON come testo
+    // libero e lo interpretavamo a mano — un modo di procedere fragile, che
+    // ha causato il bug della volta scorsa (array invece di oggetto).
+    // Con il tool-use, è l'API stessa a garantire che l'output rispetti lo
+    // schema dichiarato (un oggetto con esattamente i campi previsti): la
+    // classe di bug "formato inatteso" non può più verificarsi.
     let datiNuovi = {};
     try {
       const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 300, system: EXTRACTION_PROMPT, messages: [{ role: 'user', content: JSON.stringify(history) }] }),
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 300,
+          system: 'Estrai SOLO i dati esplicitamente forniti dal cliente in tutta la conversazione fornita, chiamando lo strumento estrai_dati.',
+          tools: [EXTRACTION_TOOL],
+          tool_choice: { type: 'tool', name: 'estrai_dati' },
+          messages: [{ role: 'user', content: JSON.stringify(history) }],
+        }),
       });
       const extractData = await extractResponse.json();
-      const rawJson = extractData.content?.find((b) => b.type === 'text')?.text || '{}';
-      const parsed = JSON.parse(rawJson.replace(/```json|```/g, '').trim());
-
-      // FIX: a volte il modello risponde con un array (o un oggetto annidato
-      // sotto chiavi numeriche) invece di un singolo oggetto piatto. Se ciò
-      // accade, scartiamo il risultato invece di fonderlo: uno spread di un
-      // array su un oggetto produce chiavi "0","1","2"... e NON sovrascrive
-      // i campi scalari esistenti (es. "urgente"), che quindi resterebbero
-      // bloccati per sempre sul primo valore ricevuto.
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        for (const [k, v] of Object.entries(parsed)) {
+      const toolUseBlock = extractData.content?.find((b) => b.type === 'tool_use');
+      const input = toolUseBlock?.input;
+      if (input && typeof input === 'object' && !Array.isArray(input)) {
+        for (const [k, v] of Object.entries(input)) {
           if (campiConsentiti.has(k)) {
             datiNuovi[k] = v;
           }
         }
       } else {
-        console.error('Estrazione campi: formato inatteso (non un oggetto piatto):', rawJson);
+        console.error('Estrazione campi: nessun tool_use valido nella risposta:', JSON.stringify(extractData));
       }
     } catch (e) {
       console.error('Errore estrazione campi:', e);
