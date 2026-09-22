@@ -1,20 +1,19 @@
 // api/info-cliente.js
 //
-// Pagina web protetta da password che permette di inserire/modificare le
-// informazioni generali di un cliente (indirizzo, prezzi, servizi, altre
-// note) — usate poi dal bot su WhatsApp per rispondere automaticamente a
-// domande fuori dallo script di raccolta dati.
+// Pagina protetta che permette di inserire/modificare le informazioni
+// generali di un cliente (indirizzo, prezzi, servizi, altre note) — usate
+// dal bot su WhatsApp per rispondere a domande fuori dallo script.
 //
-// Link di accesso, stesso schema della dashboard già esistente:
-//   https://<il-tuo-dominio>.vercel.app/api/info-cliente?cliente_id=<uuid>&password=<password>
+// FIX P0-1 (21/9/2026): stessa autenticazione a sessione di api/dashboard.js
+// — il cliente_id arriva SOLO dal cookie di sessione firmato, mai da query
+// string o body. Login condiviso: /api/dashboard-login.
 //
-// Usa la stessa variabile d'ambiente DASHBOARD_PASSWORD già configurata su
-// Vercel per la dashboard del cliente.
-//
-// Richiede la colonna "info_generali" (tipo jsonb, default '{}') sulla
-// tabella configurazioni_cliente. Se non esiste ancora, crearla su Supabase
-// con:
-//   alter table configurazioni_cliente add column info_generali jsonb default '{}'::jsonb;
+// Richiede la colonna "info_generali" (jsonb, default '{}') sulla tabella
+// configurazioni_cliente — vedi migrations/001_dashboard_auth.sql per la
+// colonna dashboard_token e verificare separatamente se info_generali esiste
+// già (introdotta in una sessione precedente, non confermabile da qui).
+
+import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 
 function escapeHtml(str) {
   return String(str || '')
@@ -33,29 +32,42 @@ const CAMPI_FORM = [
   { chiave: 'altre_informazioni', etichetta: 'Altre informazioni utili', tipo: 'textarea', placeholder: 'Parcheggio disponibile, accesso disabili, si accettano solo contanti...' },
 ];
 
-export default async function handler(req, res) {
-  const isPost = req.method === 'POST';
-  const params = isPost ? (req.body || {}) : (req.query || {});
-  const cliente_id = params.cliente_id;
-  const password = params.password;
+function paginaNonAutenticato() {
+  return `<!DOCTYPE html><html lang="it"><body style="font-family:sans-serif;padding:40px;text-align:center;">
+    <h2>Sessione scaduta o non autenticata</h2>
+    <p><a href="/api/dashboard-login">Accedi di nuovo</a></p>
+  </body></html>`;
+}
 
-  const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
-  if (!cliente_id || !password || !DASHBOARD_PASSWORD || password !== DASHBOARD_PASSWORD) {
-    res.status(401).setHeader('Content-Type', 'text/html');
-    res.send('<!DOCTYPE html><html lang="it"><body style="font-family:sans-serif;padding:40px;"><h2>Accesso non autorizzato</h2><p>Controlla il link (cliente_id e password) e riprova.</p></body></html>');
+export default async function handler(req, res) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+  const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+
+  if (!SESSION_SECRET) {
+    console.error('SESSION_SECRET non configurato.');
+    res.status(500).send('Configurazione mancante');
     return;
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+  // ===== Autenticazione: SOLO dalla sessione =====
+  const cookieToken = leggiCookieSessione(req);
+  const sessione = verificaSessione(cookieToken, SESSION_SECRET);
+  if (!sessione || !sessione.cliente_id) {
+    res.status(401).setHeader('Content-Type', 'text/html');
+    res.send(paginaNonAutenticato());
+    return;
+  }
+  const cliente_id = sessione.cliente_id;
 
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.status(405).send('Metodo non permesso');
     return;
   }
 
-  if (isPost) {
+  if (req.method === 'POST') {
+    const params = req.body || {};
     const nuoveInfo = {};
     for (const campo of CAMPI_FORM) {
       nuoveInfo[campo.chiave] = (params[campo.chiave] || '').trim();
@@ -76,14 +88,12 @@ export default async function handler(req, res) {
       res.status(500).send('Errore nel salvataggio. Riprova.');
       return;
     }
-    res.writeHead(302, {
-      Location: `/api/info-cliente?cliente_id=${encodeURIComponent(cliente_id)}&password=${encodeURIComponent(password)}&salvato=1`,
-    });
+    res.writeHead(302, { Location: '/api/info-cliente?salvato=1' });
     res.end();
     return;
   }
 
-  // GET: recupera i dati attuali e mostra il form
+  // GET: recupera i dati attuali e mostra il form (cliente_id sempre dalla sessione)
   let config = null;
   try {
     const configRes = await fetch(
@@ -104,7 +114,7 @@ export default async function handler(req, res) {
 
   const nomeAttivita = config.clienti?.nome_attivita || 'Cliente';
   const infoAttuali = config.info_generali && typeof config.info_generali === 'object' ? config.info_generali : {};
-  const salvatoOraOra = params.salvato === '1';
+  const salvatoOraOra = req.query && req.query.salvato === '1';
 
   const campiHtml = CAMPI_FORM.map((campo) => {
     const valore = escapeHtml(infoAttuali[campo.chiave] || '');
@@ -152,8 +162,6 @@ export default async function handler(req, res) {
     ${salvatoOraOra ? '<div class="banner-ok">Informazioni salvate correttamente.</div>' : ''}
     <div class="card">
       <form method="POST" action="/api/info-cliente">
-        <input type="hidden" name="cliente_id" value="${escapeHtml(cliente_id)}" />
-        <input type="hidden" name="password" value="${escapeHtml(password)}" />
         ${campiHtml}
         <button type="submit">Salva informazioni</button>
       </form>
