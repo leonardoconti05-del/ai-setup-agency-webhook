@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { validaFirmaTwilio } from '../lib/twilio-signature.js';
 
 function escapeXml(text) {
   return String(text)
@@ -8,6 +9,13 @@ function escapeXml(text) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 }
+
+// FIX di reliability già presente nel codice ereditato: un controllo
+// "truthy" scarterebbe erroneamente `false`/`0`, valori legittimi per
+// campi booleani/numerici. Esportata per test automatico (vedi
+// tests/campo-valido.test.js) e usata sia qui sotto sia nel calcolo di
+// tuttiCompilati più avanti nel file.
+export const campoValido = (v) => v !== null && v !== undefined && v !== '';
 
 function sendTwiml(res, message) {
   res.setHeader('Content-Type', 'text/xml');
@@ -175,7 +183,7 @@ FORMATO OUTPUT
 Rispondi SOLO con il messaggio da inviare al cliente. Italiano naturale, senza markdown.`;
 }
 
-function buildExtractionTool(config) {
+export function buildExtractionTool(config) {
   const campi = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere : [];
   const properties = {};
   for (const c of campi) {
@@ -213,28 +221,77 @@ async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = fal
 }
 
 // ===== SICUREZZA: verifica che la richiesta arrivi davvero da Twilio =====
-// Twilio firma ogni richiesta con l'Auth Token dell'account (header
-// X-Twilio-Signature). Senza questo controllo, chiunque conosca l'URL
-// dell'endpoint può mandare richieste finte: far consumare credito
-// Anthropic, inserire dati falsi su Supabase, spammare Telegram.
-function validaFirmaTwilio(authToken, firmaRicevuta, urlCompleto, parametri) {
-  if (!firmaRicevuta) return false;
-  const chiaviOrdinate = Object.keys(parametri).sort();
-  let dati = urlCompleto;
-  for (const chiave of chiaviOrdinate) {
-    dati += chiave + parametri[chiave];
+// La funzione di verifica è in lib/twilio-signature.js (estratta per poterla
+// testare senza rete — vedi tests/twilio-signature.test.js).
+//
+// FIX P0-2 (Product Readiness Audit, 21/9/2026): il comportamento precedente
+// era "fail-open" — se TWILIO_AUTH_TOKEN mancava, la richiesta veniva
+// comunque elaborata. Ora è "fail-closed": senza il token configurato, il
+// webhook rifiuta ogni richiesta con 500, invece di accettare traffico non
+// verificato. Una modalità di sviluppo esplicita esiste (ALLOW_UNVERIFIED_WEBHOOK
+// = 'true'), ma va impostata consapevolmente e MAI in produzione.
+
+// ===== FIX P1-1: scrittura con lock ottimistico =====
+// Problema originale: due messaggi ravvicinati dello stesso numero possono
+// essere elaborati in parallelo. Entrambi leggono lo stesso stato di
+// partenza, entrambi calcolano in memoria un nuovo `dati_raccolti`/
+// `conversazione` completo, e l'upsert finale di chi scrive per ultimo
+// sovrascrive semplicemente quello dell'altro (anche se l'upsert in sé è
+// atomico a livello Postgres, il "merge" avviene in JS prima, non in SQL:
+// è un classico lost-update).
+//
+// Mitigazione: se la riga esisteva già (ultimoAggiornamento non nullo),
+// tentiamo un PATCH condizionato anche su updated_at = ultimoAggiornamento
+// (optimistic concurrency). Se 0 righe vengono modificate, significa che
+// qualcun altro ha scritto nel frattempo: ricarichiamo la versione più
+// recente, uniamo i SOLI campi nuovi che avevamo estratto in questo turno
+// sopra ad essa (invece di sovrascrivere l'intera riga), e riproviamo con
+// un upsert incondizionato. Non è un lock distribuito vero, ma elimina la
+// perdita silenziosa di dati nel caso comune (due messaggi quasi simultanei
+// con campi diversi), rendendo visibile nei log ogni conflitto residuo.
+async function salvaRichiesta({ SUPABASE_URL, headers, cliente_id, telefono, datiNuovi, stato, history, ultimoAggiornamento }) {
+  const nowIso = new Date().toISOString();
+
+  if (ultimoAggiornamento) {
+    const patchRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&numero_utente=eq.${encodeURIComponent(telefono)}&updated_at=eq.${encodeURIComponent(ultimoAggiornamento)}`,
+      {
+        method: 'PATCH',
+        headers: { ...headers, Prefer: 'return=representation' },
+        body: JSON.stringify({ dati_raccolti: datiNuovi, stato, conversazione: history, updated_at: nowIso }),
+      }
+    );
+    const patched = await patchRes.json().catch(() => []);
+    if (Array.isArray(patched) && patched.length > 0) {
+      return; // scrittura riuscita, nessun conflitto
+    }
+    console.error(`Conflitto di scrittura rilevato su richieste_clienti (cliente_id=${cliente_id}, numero=${telefono}): un'altra richiesta ha aggiornato la riga nel frattempo. Rifaccio il merge.`);
+
+    // Rileggiamo lo stato più recente e uniamo sopra di esso, invece di
+    // sovrascriverlo alla cieca.
+    const freshRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&numero_utente=eq.${encodeURIComponent(telefono)}&select=dati_raccolti`,
+      { headers }
+    );
+    const freshRows = await freshRes.json().catch(() => []);
+    const datiRemotiPiuRecenti = (Array.isArray(freshRows) && freshRows[0]?.dati_raccolti) || {};
+    const datiUniti = { ...datiRemotiPiuRecenti, ...datiNuovi };
+
+    await fetch(`${SUPABASE_URL}/rest/v1/richieste_clienti?on_conflict=cliente_id,numero_utente`, {
+      method: 'POST',
+      headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify({ cliente_id, numero_utente: telefono, dati_raccolti: datiUniti, stato, conversazione: history, updated_at: nowIso }),
+    });
+    return;
   }
-  const hmac = crypto.createHmac('sha1', authToken);
-  hmac.update(Buffer.from(dati, 'utf-8'));
-  const firmaAttesa = hmac.digest('base64');
-  try {
-    const a = Buffer.from(firmaAttesa);
-    const b = Buffer.from(firmaRicevuta);
-    if (a.length !== b.length) return false;
-    return crypto.timingSafeEqual(a, b);
-  } catch {
-    return false;
-  }
+
+  // Nessuna riga precedente: insert (atomico a livello Postgres anche in
+  // caso di doppio "primo messaggio" simultaneo, grazie a ON CONFLICT).
+  await fetch(`${SUPABASE_URL}/rest/v1/richieste_clienti?on_conflict=cliente_id,numero_utente`, {
+    method: 'POST',
+    headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ cliente_id, numero_utente: telefono, dati_raccolti: datiNuovi, stato, conversazione: history, updated_at: nowIso }),
+  });
 }
 
 export default async function handler(req, res) {
@@ -243,19 +300,23 @@ export default async function handler(req, res) {
   }
 
   const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  if (TWILIO_AUTH_TOKEN) {
+  const ALLOW_UNVERIFIED_WEBHOOK = process.env.ALLOW_UNVERIFIED_WEBHOOK === 'true';
+
+  if (!TWILIO_AUTH_TOKEN) {
+    if (ALLOW_UNVERIFIED_WEBHOOK) {
+      console.error('ATTENZIONE: TWILIO_AUTH_TOKEN assente. Richiesta elaborata SENZA verifica perché ALLOW_UNVERIFIED_WEBHOOK=true — accettabile solo in sviluppo, MAI in produzione.');
+    } else {
+      console.error('TWILIO_AUTH_TOKEN mancante: richiesta rifiutata (fail-closed). Impostare la variabile su Vercel prima di ricevere traffico reale.');
+      return res.status(500).send('Server misconfigured: TWILIO_AUTH_TOKEN missing');
+    }
+  } else {
     const firmaRicevuta = req.headers['x-twilio-signature'];
     const urlCompleto = `https://${req.headers.host}${req.url}`;
-    const parametriValidi = validaFirmaTwilio(TWILIO_AUTH_TOKEN, firmaRicevuta, urlCompleto, req.body || {});
-    if (!parametriValidi) {
+    const firmaValida = validaFirmaTwilio(TWILIO_AUTH_TOKEN, firmaRicevuta, urlCompleto, req.body || {});
+    if (!firmaValida) {
       console.error('Richiesta rifiutata: firma Twilio non valida o assente.');
       return res.status(403).send('Forbidden');
     }
-  } else {
-    // Nessun TWILIO_AUTH_TOKEN configurato: la richiesta viene comunque
-    // elaborata (per non rompere l'ambiente di test), ma va aggiunta questa
-    // variabile d'ambiente prima di andare in produzione con clienti reali.
-    console.error('ATTENZIONE: TWILIO_AUTH_TOKEN non configurato, richieste non verificate.');
   }
 
   const body = req.body || {};
@@ -370,18 +431,43 @@ export default async function handler(req, res) {
         history.push({ role: 'user', content: messaggio });
         history.push({ role: 'assistant', content: reply });
 
-        await fetch(`${SUPABASE_URL}/rest/v1/richieste_clienti?on_conflict=cliente_id,numero_utente`, {
-          method: 'POST',
-          headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
-          body: JSON.stringify({
-            cliente_id, numero_utente: telefono, dati_raccolti: datiPrecedenti,
-            stato: 'completata', conversazione: history, updated_at: new Date().toISOString(),
-          }),
+        await salvaRichiesta({
+          SUPABASE_URL, headers, cliente_id, telefono,
+          datiNuovi: datiPrecedenti, stato: 'completata', history, ultimoAggiornamento,
         });
 
         return sendTwiml(res, reply);
       } else {
         return sendTwiml(res, 'Non ho capito la scelta. Risponda con 1, 2 o 3 per indicare l\'orario preferito.');
+      }
+    }
+
+    // ===== FIX P1-9: limite di utilizzo mensile per cliente =====
+    // Un singolo cliente non deve poter generare consumo illimitato di
+    // credito Anthropic. Il contatore è incrementato atomicamente da una
+    // funzione Postgres (vedi migrations/002_cost_control.sql) per evitare
+    // di introdurre un'altra race condition nel contatore stesso.
+    // Scelta deliberata: se il meccanismo di conteggio fallisce (es. la
+    // funzione SQL non è ancora stata creata), la richiesta viene comunque
+    // elaborata (fail-open) — bloccare TUTTI i clienti per un problema del
+    // solo sistema di controllo costi sarebbe un danno peggiore. L'evento
+    // viene loggato per restare visibile.
+    if (config.limite_messaggi_mese) {
+      const meseCorrente = new Date().toISOString().slice(0, 7);
+      try {
+        const usageRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/incrementa_utilizzo_mensile`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ p_cliente_id: cliente_id, p_mese: meseCorrente }),
+        });
+        const usageData = await usageRes.json();
+        const conteggioAttuale = Array.isArray(usageData) ? usageData[0]?.conteggio : usageData?.conteggio;
+        if (typeof conteggioAttuale === 'number' && conteggioAttuale > config.limite_messaggi_mese) {
+          console.error(`Limite mensile superato per cliente ${cliente_id}: ${conteggioAttuale}/${config.limite_messaggi_mese}`);
+          return sendTwiml(res, 'Il servizio automatico ha raggiunto il limite di richieste per questo mese. La contatteremo noi direttamente al più presto.');
+        }
+      } catch (e) {
+        console.error('Errore controllo limite mensile (fail-open, richiesta comunque elaborata):', e);
       }
     }
 
@@ -455,7 +541,7 @@ export default async function handler(req, res) {
     // o `0`, che sono risposte valide e complete (es. un campo booleano di
     // urgenza risposto con "no"). Consideriamo "vuoto" solo null/undefined
     // e la stringa vuota.
-    const campoValido = (v) => v !== null && v !== undefined && v !== '';
+    // campoValido esportata più sotto per il test automatico (stessa logica)
     const tuttiCompilati = campiRichiesti.length > 0 && campiRichiesti.every((c) => campoValido(datiCombinati[c]));
 
     let stato = urgente ? 'urgente' : tuttiCompilati ? 'completata' : 'in_corso';
@@ -483,13 +569,9 @@ export default async function handler(req, res) {
       }
     }
 
-    await fetch(`${SUPABASE_URL}/rest/v1/richieste_clienti?on_conflict=cliente_id,numero_utente`, {
-      method: 'POST',
-      headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
-      body: JSON.stringify({
-        cliente_id, numero_utente: telefono, dati_raccolti: datiCombinati,
-        stato, conversazione: history, updated_at: new Date().toISOString(),
-      }),
+    await salvaRichiesta({
+      SUPABASE_URL, headers, cliente_id, telefono,
+      datiNuovi: datiCombinati, stato, history, ultimoAggiornamento,
     });
 
     return sendTwiml(res, reply);
