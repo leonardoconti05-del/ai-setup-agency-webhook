@@ -1,4 +1,4 @@
-// api/info-cliente.js
+// api/dashboard-login.js
 //
 // Pagina protetta che permette di inserire/modificare le informazioni
 // generali di un cliente (indirizzo, prezzi, servizi, altre note) — usate
