@@ -1,3 +1,19 @@
+// api/dashboard.js
+//
+// FIX P0-1 (21/9/2026): il cliente_id NON viene più letto dalla query string
+// (era: ?cliente_id=X&password=Y, con Y identica per tutti i clienti — un
+// cliente poteva vedere i dati di un altro semplicemente cambiando X).
+// Ora il cliente_id è determinato ESCLUSIVAMENTE dalla sessione firmata
+// (cookie HttpOnly), impostata da api/dashboard-login.js dopo aver
+// verificato un codice di accesso univoco per cliente. Qualsiasi valore
+// arrivi da query string o body viene ignorato ai fini dell'identità.
+//
+// FIX P1-7: il cambio di stato (prima ?action=set_stato via link GET, quindi
+// vulnerabile a prefetching/CSRF-like) ora richiede una richiesta POST con
+// un piccolo <form>, non più un semplice link cliccabile.
+
+import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
+
 function escapeHtml(text) {
   return String(text || '')
     .replace(/&/g, '&amp;')
@@ -6,22 +22,37 @@ function escapeHtml(text) {
     .replace(/"/g, '&quot;');
 }
 
+function paginaNonAutenticato() {
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f3f4f6;">
+    <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
+      <h2 style="margin-top:0;">Sessione scaduta o non autenticata</h2>
+      <p style="color:#6b7280;">Accedi di nuovo con il tuo codice.</p>
+      <a href="/api/dashboard-login" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Vai al login</a>
+    </div>
+  </body></html>`;
+}
+
 export default async function handler(req, res) {
-  const { cliente_id, password, action, numero_utente, nuovo_stato } = req.query;
-
-  const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
-  if (!DASHBOARD_PASSWORD || password !== DASHBOARD_PASSWORD) {
-    res.setHeader('Content-Type', 'text/html');
-    return res.status(401).send('<h2>Accesso non autorizzato</h2><p>Password mancante o errata.</p>');
-  }
-
-  if (!cliente_id) {
-    res.setHeader('Content-Type', 'text/html');
-    return res.status(400).send('<h2>Parametro cliente_id mancante</h2>');
-  }
-
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+
+  if (!SESSION_SECRET) {
+    console.error('SESSION_SECRET non configurato.');
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(500).send('<h2>Configurazione mancante</h2>');
+  }
+
+  // ===== Autenticazione: SOLO dalla sessione, mai da input del client =====
+  const cookieToken = leggiCookieSessione(req);
+  const sessione = verificaSessione(cookieToken, SESSION_SECRET);
+  if (!sessione || !sessione.cliente_id) {
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(401).send(paginaNonAutenticato());
+  }
+  const cliente_id = sessione.cliente_id; // <-- unica fonte di verità per il tenant
+
   const headers = {
     'Content-Type': 'application/json',
     apikey: SUPABASE_KEY,
@@ -29,8 +60,12 @@ export default async function handler(req, res) {
   };
 
   try {
-    // Se arriva un'azione di cambio stato, aggiorna e poi redirect alla pagina pulita
-    if (action === 'set_stato' && numero_utente && nuovo_stato) {
+    // ===== Cambio stato: solo POST, cliente_id preso dalla sessione =====
+    if (req.method === 'POST') {
+      const { numero_utente, nuovo_stato } = req.body || {};
+      if (!numero_utente || !nuovo_stato) {
+        return res.status(400).send('Parametri mancanti');
+      }
       await fetch(
         `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&numero_utente=eq.${encodeURIComponent(numero_utente)}`,
         {
@@ -39,8 +74,12 @@ export default async function handler(req, res) {
           body: JSON.stringify({ stato: nuovo_stato, updated_at: new Date().toISOString() }),
         }
       );
-      res.writeHead(302, { Location: `/api/dashboard?cliente_id=${encodeURIComponent(cliente_id)}&password=${encodeURIComponent(password)}` });
+      res.writeHead(302, { Location: '/api/dashboard' });
       return res.end();
+    }
+
+    if (req.method !== 'GET') {
+      return res.status(405).send('Metodo non permesso');
     }
 
     // Info cliente
@@ -51,7 +90,7 @@ export default async function handler(req, res) {
     const clienteData = await clienteRes.json();
     const nomeAttivita = clienteData[0]?.nome_attivita || 'Attività';
 
-    // Richieste del cliente, più recenti prima
+    // Richieste del cliente (SEMPRE filtrate per il cliente_id di sessione)
     const richiesteRes = await fetch(
       `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=*&order=updated_at.desc`,
       { headers }
@@ -70,10 +109,12 @@ export default async function handler(req, res) {
       in_corso: { colore: '#d97706', bg: '#fffbeb', label: '⏳ In corso' },
     };
 
-    const azioneBottone = (num, stato, label) => {
-      const url = `/api/dashboard?cliente_id=${encodeURIComponent(cliente_id)}&password=${encodeURIComponent(password)}&action=set_stato&numero_utente=${encodeURIComponent(num)}&nuovo_stato=${encodeURIComponent(stato)}`;
-      return `<a href="${url}" class="btn-stato">${label}</a>`;
-    };
+    const formAzione = (num, stato, label) => `
+      <form method="POST" action="/api/dashboard" style="display:inline;">
+        <input type="hidden" name="numero_utente" value="${escapeHtml(num)}" />
+        <input type="hidden" name="nuovo_stato" value="${escapeHtml(stato)}" />
+        <button type="submit" class="btn-stato">${label}</button>
+      </form>`;
 
     const righe = lista
       .map((r) => {
@@ -91,8 +132,8 @@ export default async function handler(req, res) {
           <td><a href="tel:${escapeHtml(r.numero_utente)}" class="telefono">${escapeHtml(r.numero_utente)}</a></td>
           <td class="data-col">${data}</td>
           <td class="azioni">
-            ${azioneBottone(r.numero_utente, 'in_corso', 'In corso')}
-            ${azioneBottone(r.numero_utente, 'completata', 'Completata')}
+            ${formAzione(r.numero_utente, 'in_corso', 'In corso')}
+            ${formAzione(r.numero_utente, 'completata', 'Completata')}
           </td>
         </tr>`;
       })
@@ -171,16 +212,16 @@ export default async function handler(req, res) {
     .telefono:hover { text-decoration: underline; }
     .data-col { color: #6b7280; font-size: 13px; white-space: nowrap; }
     .azioni { white-space: nowrap; }
+    .azioni form { display: inline-block; margin-right: 6px; }
     .btn-stato {
-      display: inline-block;
+      font: inherit;
       font-size: 12px;
       padding: 5px 10px;
-      margin-right: 6px;
       border-radius: 6px;
       border: 1px solid #d1d5db;
       color: #374151;
-      text-decoration: none;
       background: #f9fafb;
+      cursor: pointer;
     }
     .btn-stato:hover { background: #f3f4f6; border-color: #9ca3af; }
     .empty { text-align: center; padding: 50px 20px; color: #9ca3af; }
