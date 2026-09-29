@@ -90,6 +90,19 @@ export default async function handler(req, res) {
     const clienteData = await clienteRes.json();
     const nomeAttivita = clienteData[0]?.nome_attivita || 'Attività';
 
+    // Valore medio per la stima ROI (facoltativo, inserito dal cliente in
+    // /api/info-cliente — vedi migrations/007_analytics.sql). Se non
+    // impostato, la sezione ROI più sotto non compare affatto: mai un
+    // numero inventato da noi.
+    const configRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=valore_medio_cliente`,
+      { headers }
+    );
+    const configData = await configRes.json();
+    const valoreMedioCliente = Array.isArray(configData) && configData[0]?.valore_medio_cliente != null
+      ? Number(configData[0].valore_medio_cliente)
+      : null;
+
     // Richieste del cliente (SEMPRE filtrate per il cliente_id di sessione)
     const richiesteRes = await fetch(
       `${SUPABASE_URL}/rest/v1/richieste_clienti?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=*&order=updated_at.desc`,
@@ -102,6 +115,37 @@ export default async function handler(req, res) {
     const contaUrgenti = lista.filter((r) => r.stato === 'urgente').length;
     const contaInCorso = lista.filter((r) => r.stato === 'in_corso').length;
     const contaCompletate = lista.filter((r) => r.stato === 'completata').length;
+
+    // ===== Analytics / mini-CRM (Task #3) =====
+    // "Lead" = una conversazione in cui è stato raccolto almeno un dato reale
+    // (stessa definizione di haQualcheDato usata in api/whatsapp.js per
+    // decidere se notificare lo staff). "Appuntamento" = una prenotazione
+    // calendario confermata (dati_raccolti._fase === 'confermato', impostato
+    // in api/whatsapp.js dopo la conferma su Google Calendar).
+    const contaLead = lista.filter((r) => {
+      const dati = r.dati_raccolti || {};
+      return Object.entries(dati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
+    }).length;
+    const contaAppuntamenti = lista.filter((r) => (r.dati_raccolti || {})._fase === 'confermato').length;
+    const tassoConversione = contaLead > 0 ? Math.round((contaAppuntamenti / contaLead) * 100) : 0;
+    const roiStimato = valoreMedioCliente != null ? contaAppuntamenti * valoreMedioCliente : null;
+
+    // Messaggi totali ricevuti (da event_log, migrations/004_observability.sql)
+    // — indipendente da richieste_clienti perché conta ogni messaggio, non
+    // ogni conversazione. Usa Prefer:count=exact per un conteggio esatto
+    // senza scaricare tutte le righe.
+    let messaggiTotali = 0;
+    try {
+      const msgRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/event_log?cliente_id=eq.${encodeURIComponent(cliente_id)}&fase=eq.ricevuto&select=id&limit=1`,
+        { headers: { ...headers, Prefer: 'count=exact' } }
+      );
+      const range = msgRes.headers.get('content-range');
+      const totale = range ? range.split('/')[1] : null;
+      messaggiTotali = totale && totale !== '*' ? parseInt(totale, 10) : 0;
+    } catch (e) {
+      console.error('Errore conteggio messaggi totali:', e);
+    }
 
     const statoBadge = {
       urgente: { colore: '#dc2626', bg: '#fef2f2', label: '🚨 Urgente' },
@@ -178,6 +222,14 @@ export default async function handler(req, res) {
     }
     .stat-num { font-size: 22px; font-weight: 700; }
     .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .analytics-card { padding: 20px 24px; margin-bottom: 20px; }
+    .analytics-titolo { font-size: 15px; margin: 0 0 16px; color: #111827; }
+    .analytics-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+    .analytics-num-blocco { min-width: 100px; }
+    .analytics-num { font-size: 26px; font-weight: 700; color: #111827; }
+    .analytics-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
+    .analytics-nota { font-size: 12px; color: #9ca3af; margin: 16px 0 0; }
+    .analytics-nota a { color: #2563eb; text-decoration: none; }
     .card {
       background: white;
       border-radius: 12px;
@@ -243,6 +295,22 @@ export default async function handler(req, res) {
       <div class="stat-card"><div class="stat-num" style="color:#16a34a">${contaCompletate}</div><div class="stat-label">Completate</div></div>
     </div>
   </header>
+
+  <div class="card analytics-card">
+    <h2 class="analytics-titolo">📊 Panoramica</h2>
+    <div class="analytics-grid">
+      <div class="analytics-num-blocco"><div class="analytics-num">${messaggiTotali}</div><div class="analytics-label">Messaggi ricevuti</div></div>
+      <div class="analytics-num-blocco"><div class="analytics-num">${contaTotali}</div><div class="analytics-label">Conversazioni</div></div>
+      <div class="analytics-num-blocco"><div class="analytics-num">${contaLead}</div><div class="analytics-label">Lead (dati raccolti)</div></div>
+      <div class="analytics-num-blocco"><div class="analytics-num">${contaAppuntamenti}</div><div class="analytics-label">Appuntamenti confermati</div></div>
+      <div class="analytics-num-blocco"><div class="analytics-num">${tassoConversione}%</div><div class="analytics-label">Conversione lead&rarr;appuntamento</div></div>
+      ${roiStimato != null ? `<div class="analytics-num-blocco"><div class="analytics-num" style="color:#16a34a">€${roiStimato.toLocaleString('it-IT')}</div><div class="analytics-label">Valore stimato generato*</div></div>` : ''}
+    </div>
+    ${roiStimato != null
+      ? `<p class="analytics-nota">*Stima basata sul valore medio che hai indicato (€${valoreMedioCliente.toLocaleString('it-IT')} per appuntamento) — non è fatturato garantito.</p>`
+      : `<p class="analytics-nota">Vuoi vedere anche una stima del valore generato? <a href="/api/info-cliente">Imposta il valore medio di un appuntamento</a>.</p>`}
+  </div>
+
   <div class="card">
     ${lista.length > 0 ? `<table>
       <tr><th>Stato</th><th>Dati raccolti</th><th>Telefono</th><th>Aggiornato</th><th>Azioni</th></tr>

@@ -83,6 +83,12 @@ export default async function handler(req, res) {
     const followUpOrarioA = /^\d{2}:\d{2}$/.test(params.follow_up_orario_a || '') ? params.follow_up_orario_a : '19:00';
     const followUpMessaggio = (params.follow_up_messaggio || '').trim() || null;
 
+    // Valore medio per la stima ROI in dashboard (migrations/007_analytics.sql)
+    // — facoltativo, inserito volontariamente dal titolare. Mai inventato da noi.
+    const valoreMedioCliente = params.valore_medio_cliente && String(params.valore_medio_cliente).trim() !== ''
+      ? Math.max(0, parseFloat(String(params.valore_medio_cliente).replace(',', '.')) || 0)
+      : null;
+
     try {
       const salvataggio = await fetch(
         `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}`,
@@ -97,6 +103,7 @@ export default async function handler(req, res) {
             follow_up_orario_da: followUpOrarioDa,
             follow_up_orario_a: followUpOrarioA,
             follow_up_messaggio: followUpMessaggio,
+            valore_medio_cliente: valoreMedioCliente,
           }),
         }
       );
@@ -120,7 +127,7 @@ export default async function handler(req, res) {
   let config = null;
   try {
     const configRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=info_generali,follow_up_attivo,follow_up_dopo_ore,follow_up_max_messaggi,follow_up_orario_da,follow_up_orario_a,follow_up_messaggio,clienti(nome_attivita)`,
+      `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=info_generali,follow_up_attivo,follow_up_dopo_ore,follow_up_max_messaggi,follow_up_orario_da,follow_up_orario_a,follow_up_messaggio,valore_medio_cliente,clienti(nome_attivita)`,
       { headers }
     );
     const configData = await configRes.json();
@@ -148,6 +155,7 @@ export default async function handler(req, res) {
     orarioA: (config.follow_up_orario_a || '19:00').slice(0, 5),
     messaggio: config.follow_up_messaggio || '',
   };
+  const valoreMedioAttuale = config.valore_medio_cliente != null ? config.valore_medio_cliente : '';
 
   const campiHtml = CAMPI_FORM.map((campo) => {
     const valore = escapeHtml(infoAttuali[campo.chiave] || '');
@@ -230,6 +238,14 @@ export default async function handler(req, res) {
           <span>Messaggio del follow-up (lascia vuoto per il messaggio predefinito)</span>
           <textarea name="follow_up_messaggio" rows="3" placeholder="Ciao! Siamo ancora a disposizione per la sua richiesta...">${escapeHtml(fu.messaggio)}</textarea>
         </label>
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+        <h2 style="font-size:1.1rem;margin-top:0;">Statistiche</h2>
+        <label class="campo">
+          <span>Valore medio di un appuntamento (€, facoltativo)</span>
+          <input type="number" min="0" step="0.01" name="valore_medio_cliente" value="${escapeHtml(String(valoreMedioAttuale))}" placeholder="Es. 80" />
+        </label>
+        <p class="sub" style="margin-top:-10px;margin-bottom:16px;">Se lo indichi, la dashboard mostrerà anche una stima del valore generato dagli appuntamenti confermati (mai un numero garantito, solo una stima).</p>
 
         <button type="submit">Salva informazioni</button>
       </form>
