@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { validaFirmaTwilio } from '../lib/twilio-signature.js';
+import { creaRequestId, logEvento } from '../lib/logger.js';
 
 function escapeXml(text) {
   return String(text)
@@ -299,6 +300,15 @@ export default async function handler(req, res) {
     return res.status(405).send('Metodo non permesso');
   }
 
+  // ===== OSSERVABILITÀ: request_id univoco per seguire questo messaggio
+  // dall'inizio alla fine (vedi lib/logger.js e migrations/004_observability.sql) =====
+  const requestId = creaRequestId();
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+
+  await logEvento({ SUPABASE_URL, headers, requestId, fase: 'ricevuto' });
+
   const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
   const ALLOW_UNVERIFIED_WEBHOOK = process.env.ALLOW_UNVERIFIED_WEBHOOK === 'true';
 
@@ -307,6 +317,7 @@ export default async function handler(req, res) {
       console.error('ATTENZIONE: TWILIO_AUTH_TOKEN assente. Richiesta elaborata SENZA verifica perché ALLOW_UNVERIFIED_WEBHOOK=true — accettabile solo in sviluppo, MAI in produzione.');
     } else {
       console.error('TWILIO_AUTH_TOKEN mancante: richiesta rifiutata (fail-closed). Impostare la variabile su Vercel prima di ricevere traffico reale.');
+      await logEvento({ SUPABASE_URL, headers, requestId, fase: 'twilio_verificato', stato: 'errore', dettaglio: { motivo: 'TWILIO_AUTH_TOKEN mancante' } });
       return res.status(500).send('Server misconfigured: TWILIO_AUTH_TOKEN missing');
     }
   } else {
@@ -315,9 +326,11 @@ export default async function handler(req, res) {
     const firmaValida = validaFirmaTwilio(TWILIO_AUTH_TOKEN, firmaRicevuta, urlCompleto, req.body || {});
     if (!firmaValida) {
       console.error('Richiesta rifiutata: firma Twilio non valida o assente.');
+      await logEvento({ SUPABASE_URL, headers, requestId, fase: 'twilio_verificato', stato: 'errore', dettaglio: { motivo: 'firma non valida' } });
       return res.status(403).send('Forbidden');
     }
   }
+  await logEvento({ SUPABASE_URL, headers, requestId, fase: 'twilio_verificato' });
 
   const body = req.body || {};
   const messageSid = body.MessageSid || null;
@@ -327,12 +340,9 @@ export default async function handler(req, res) {
   const telefono = fromRaw.replace('whatsapp:', '');
 
   if (!messaggio || !telefono) {
+    await logEvento({ SUPABASE_URL, headers, requestId, telefono, fase: 'esito', stato: 'errore', dettaglio: { motivo: 'messaggio o telefono mancante' } });
     return sendTwiml(res, 'Messaggio non ricevuto correttamente. Riprova tra poco.');
   }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
 
   try {
     // 0. Trova la configurazione del cliente
@@ -345,11 +355,13 @@ export default async function handler(req, res) {
 
     if (!config) {
       console.error('Nessuna configurazione per il numero:', toRaw);
+      await logEvento({ SUPABASE_URL, headers, requestId, telefono, fase: 'tenant_identificato', stato: 'errore', dettaglio: { to: toRaw } });
       return sendTwiml(res, 'Servizio momentaneamente non disponibile. Riprova più tardi.');
     }
 
     const cliente_id = config.cliente_id;
     const nomeAttivita = config.clienti?.nome_attivita || 'la nostra attività';
+    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'tenant_identificato' });
 
     // Campi previsti per questo cliente — usato sia per il prompt di estrazione
     // sia per "sanificare" il risultato dell'estrazione più sotto.
@@ -379,8 +391,10 @@ export default async function handler(req, res) {
           }
         }
       }
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'conversazione_recuperata', dettaglio: { numeroMessaggiStorico: history.length } });
     } catch (e) {
       console.error('Errore lettura richiesta esistente:', e);
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'conversazione_recuperata', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
     }
     // FIX: scadenza conversazione. Se l'ultimo scambio risale a più di 48 ore
     // fa, ripartiamo da zero invece di trascinare per sempre una cronologia
@@ -402,6 +416,7 @@ export default async function handler(req, res) {
     const sidsProcessati = Array.isArray(datiPrecedenti._sids) ? datiPrecedenti._sids : [];
     if (messageSid && sidsProcessati.includes(messageSid)) {
       console.error('Messaggio duplicato ignorato:', messageSid);
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'esito', dettaglio: { duplicato: true } });
       return sendTwiml(res, '');
     }
     if (messageSid) {
@@ -423,9 +438,11 @@ export default async function handler(req, res) {
           reply = `Perfetto, appuntamento confermato per ${formattaSlot(slotObj)}. A presto!`;
           datiPrecedenti._fase = 'confermato';
           delete datiPrecedenti._slotOptions;
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar' });
         } catch (e) {
           console.error('Errore creazione evento calendario:', e);
           reply = 'Ho registrato la sua scelta, ma c\'è stato un problema tecnico nel confermare l\'orario. La contatteremo noi a breve per fissare l\'appuntamento.';
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
         }
 
         history.push({ role: 'user', content: messaggio });
@@ -436,8 +453,10 @@ export default async function handler(req, res) {
           datiNuovi: datiPrecedenti, stato: 'completata', history, ultimoAggiornamento,
         });
 
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'esito', dettaglio: { stato: 'completata' } });
         return sendTwiml(res, reply);
       } else {
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'esito', dettaglio: { motivo: 'scelta slot non valida' } });
         return sendTwiml(res, 'Non ho capito la scelta. Risponda con 1, 2 o 3 per indicare l\'orario preferito.');
       }
     }
@@ -464,10 +483,12 @@ export default async function handler(req, res) {
         const conteggioAttuale = Array.isArray(usageData) ? usageData[0]?.conteggio : usageData?.conteggio;
         if (typeof conteggioAttuale === 'number' && conteggioAttuale > config.limite_messaggi_mese) {
           console.error(`Limite mensile superato per cliente ${cliente_id}: ${conteggioAttuale}/${config.limite_messaggi_mese}`);
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'limite_mensile', stato: 'errore', dettaglio: { conteggioAttuale, limite: config.limite_messaggi_mese } });
           return sendTwiml(res, 'Il servizio automatico ha raggiunto il limite di richieste per questo mese. La contatteremo noi direttamente al più presto.');
         }
       } catch (e) {
         console.error('Errore controllo limite mensile (fail-open, richiesta comunque elaborata):', e);
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'limite_mensile', stato: 'errore', dettaglio: { errore: String(e.message || e), failOpen: true } });
       }
     }
 
@@ -486,8 +507,10 @@ export default async function handler(req, res) {
 
     if (!chatData.content) {
       console.error('Anthropic chat error:', JSON.stringify(chatData));
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude', stato: 'errore', dettaglio: { risposta: chatData } });
       return sendTwiml(res, 'Al momento non riesco a risponderle, la contatteremo noi appena possibile.');
     }
+    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude' });
 
     let reply = chatData.content.find((b) => b.type === 'text')?.text || 'Mi scusi, può ripetere?';
     history.push({ role: 'assistant', content: reply });
@@ -522,11 +545,14 @@ export default async function handler(req, res) {
             datiNuovi[k] = v;
           }
         }
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati' });
       } else {
         console.error('Estrazione campi: nessun tool_use valido nella risposta:', JSON.stringify(extractData));
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { risposta: extractData } });
       }
     } catch (e) {
       console.error('Errore estrazione campi:', e);
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
     }
 
     const datiCombinati = { ...datiPrecedenti, ...datiNuovi };
@@ -564,8 +590,10 @@ export default async function handler(req, res) {
           reply = 'Perfetto, ho tutte le informazioni necessarie. Non trovo però orari liberi a breve: la contatteremo noi per fissare l\'appuntamento appena possibile.';
           history[history.length - 1] = { role: 'assistant', content: reply };
         }
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar', dettaglio: { slotTrovati: slots.length } });
       } catch (e) {
         console.error('Errore ricerca slot calendario:', e);
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
       }
     }
 
@@ -574,9 +602,11 @@ export default async function handler(req, res) {
       datiNuovi: datiCombinati, stato, history, ultimoAggiornamento,
     });
 
+    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'esito', dettaglio: { stato, urgente } });
     return sendTwiml(res, reply);
   } catch (err) {
     console.error('Handler crash:', err);
+    await logEvento({ SUPABASE_URL, headers, requestId, telefono, fase: 'esito', stato: 'errore', dettaglio: { errore: String(err.message || err) } });
     return sendTwiml(res, 'Abbiamo riscontrato un problema tecnico, la contatteremo noi a breve.');
   }
 }
