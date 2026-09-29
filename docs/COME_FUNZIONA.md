@@ -10,14 +10,30 @@ scelte fatte, vedi `docs/DECISIONS.md`.
 
 ```
 /api/whatsapp.js          webhook Twilio — riceve e risponde ai messaggi WhatsApp
-/api/dashboard.js         dashboard dello staff (protetta da sessione)
-/api/dashboard-login.js   pagina di login (token -> cookie di sessione)
-/api/info-cliente.js      form per indirizzo/prezzi/servizi (protetta da sessione)
-/lib/session.js           sessione firmata HMAC (login dashboard)
+/api/dashboard.js         gestionale del singolo cliente (protetta da sessione)
+/api/dashboard-login.js   pagina di login per-cliente (dashboard_token -> cookie di sessione)
+/api/info-cliente.js      form per indirizzo/prezzi/servizi/personale/orari (protetta da sessione)
+/api/knowledge.js         Knowledge Base / RAG per cliente (protetta da sessione)
+/api/agenzia.js           dashboard master per il titolare — TUTTI i clienti/settori
+/api/agenzia-login.js     login admin (password unica, cookie separato dai clienti)
+/api/cron/follow-up.js    follow-up automatici per lead non convertiti (Vercel Cron)
+/lib/session.js           sessione firmata HMAC (login dashboard, cookie parametrico)
 /lib/twilio-signature.js  verifica che le richieste arrivino davvero da Twilio
+/lib/settori.js           etichette/icone per settore, usate dal gestionale
+/lib/logger.js            observability — event_log per fase di elaborazione
+/lib/embeddings.js        client Voyage AI per la Knowledge Base
 /tests/                   test automatici (node --test tests/*.test.js)
 /migrations/              storico delle modifiche allo schema Supabase
 ```
+
+Vedi `docs/DECISIONS.md` per il dettaglio di follow-up (P2-1) e dei GRANT
+sulle tabelle nuove (P2-2). Il gestionale del singolo cliente (punto 2 qui
+sotto) è organizzato in sezioni — Panoramica, Finanziario, Servizi
+(`servizi_cliente`), Personale (`personale_cliente`), Orari di apertura
+(`configurazioni_cliente.orari_apertura`), Richieste — con etichette
+adattate al settore dell'attività (`lib/settori.js`). La dashboard agenzia
+(`api/agenzia.js`) aggrega questi stessi dati su tutti i clienti,
+raggruppati per settore, per un titolare che non è un singolo cliente.
 
 ## Le tre tabelle principali su Supabase
 

@@ -193,6 +193,34 @@ verificati con cautela (probabile errore 63016 fuori dalla finestra delle
 
 ---
 
+## P2-2 — GRANT espliciti su ogni nuova tabella, non solo RLS
+
+**Cosa è successo (29/9/2026).** Dopo aver abilitato RLS su `documents` e
+`knowledge_chunks` (vedi la nota nella migrazione 005) e aver creato
+`event_log` (migrazione 004), il salvataggio di un documento nella
+Knowledge Base falliva con "Errore nel salvataggio del documento". La causa
+non era RLS: era che quelle tre tabelle, create tramite lo strumento di
+migrazione MCP, non avevano ricevuto i `GRANT` di base
+(`SELECT`/`INSERT`/`UPDATE`/`DELETE`) per il ruolo `service_role` — a
+differenza di `clienti`/`richieste_clienti`/`configurazioni_cliente`
+(tabelle più vecchie, create diversamente, con i GRANT già presenti). Ogni
+richiesta REST del backend (che usa sempre `service_role`) veniva rifiutata
+con **403 "permission denied"** a livello di permessi Postgres, prima
+ancora che le policy RLS entrassero in gioco — `service_role` bypassa RLS
+per definizione, ma non bypassa l'assenza di un GRANT.
+
+**La regola per ogni tabella nuova da qui in avanti.** `ENABLE ROW LEVEL
+SECURITY` non basta mai da solo: ogni migrazione che crea una tabella
+applicativa deve includere esplicitamente
+`grant select, insert, update, delete on <tabella> to service_role;`
+nello stesso file, anche se sembra ridondante. La migrazione
+`008_servizi_personale.sql` (Servizi/Personale, 30/9/2026) è la prima
+scritta con questa regola fin dall'inizio — verificata via
+`information_schema.role_table_grants` prima di considerarla chiusa, non
+solo "nessun errore visibile".
+
+---
+
 ## Altre decisioni minori, per completezza
 
 - **Deduplicazione messaggi Twilio**: Twilio può ritrasmettere lo stesso

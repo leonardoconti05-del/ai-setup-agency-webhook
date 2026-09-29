@@ -15,6 +15,7 @@ repository — solo su Vercel.
 | `TWILIO_ACCOUNT_SID` | `api/cron/follow-up.js` | Account SID Twilio, richiesto insieme a `TWILIO_AUTH_TOKEN` per inviare messaggi WhatsApp proattivi (follow-up) via API REST di Twilio. |
 | `ANTHROPIC_API_KEY` | `api/whatsapp.js` | Chiave API Anthropic, per le due chiamate a Claude (risposta al cliente + estrazione dati). |
 | `CRON_SECRET` | `api/cron/follow-up.js` | Segreto condiviso con Vercel Cron per autenticare le chiamate al cron dei follow-up (Vercel lo invia automaticamente come header `Authorization: Bearer <valore>` se la variabile è impostata). Senza questa variabile l'endpoint rifiuta ogni richiesta (fail-closed, stesso principio di `TWILIO_AUTH_TOKEN`). |
+| `AGENCY_ADMIN_PASSWORD` | `api/agenzia-login.js` | Password per la dashboard master dell'agenzia (`api/agenzia.js`), che aggrega tutti i clienti/settori — riservata al titolare, non ai clienti. Confrontata a tempo costante (`crypto.timingSafeEqual`). Senza questa variabile l'accesso admin è disabilitato (fail-closed). Scegli una password lunga e casuale: dà accesso a dati aggregati di TUTTI i clienti. |
 
 ## Opzionali
 
