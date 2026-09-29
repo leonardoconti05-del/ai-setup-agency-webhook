@@ -605,6 +605,14 @@ export default async function handler(req, res) {
     const datiCombinati = { ...datiPrecedenti, ...datiNuovi };
     const urgente = datiCombinati.urgente === true || datiCombinati.urgente === 'true';
 
+    // ===== FOLLOW-UP: STOP workflow su risposta reale del cliente =====
+    // Se il cliente scrive di nuovo, la sequenza di follow-up automatici
+    // (api/cron/follow-up.js, migrations/006_follow_up.sql) va azzerata: un
+    // nuovo silenzio futuro deve ripartire da zero, non continuare a contare
+    // da dove si era fermata prima che il cliente rispondesse.
+    delete datiCombinati._follow_up_count;
+    delete datiCombinati._ultimo_follow_up_il;
+
     const haQualcheDato = Object.entries(datiCombinati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
     if (haQualcheDato) {
       await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente);

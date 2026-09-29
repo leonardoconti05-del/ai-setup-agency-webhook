@@ -72,10 +72,33 @@ export default async function handler(req, res) {
     for (const campo of CAMPI_FORM) {
       nuoveInfo[campo.chiave] = (params[campo.chiave] || '').trim();
     }
+
+    // Follow-up automatici (migrations/006_follow_up.sql): colonne dirette
+    // su configurazioni_cliente, non dentro il jsonb info_generali — sono
+    // usate direttamente in SQL/filtri dal cron, non solo lette dal prompt.
+    const followUpAttivo = params.follow_up_attivo === 'on';
+    const followUpDopoOre = Math.max(1, parseInt(params.follow_up_dopo_ore, 10) || 24);
+    const followUpMaxMessaggi = Math.max(0, parseInt(params.follow_up_max_messaggi, 10) || 2);
+    const followUpOrarioDa = /^\d{2}:\d{2}$/.test(params.follow_up_orario_da || '') ? params.follow_up_orario_da : '09:00';
+    const followUpOrarioA = /^\d{2}:\d{2}$/.test(params.follow_up_orario_a || '') ? params.follow_up_orario_a : '19:00';
+    const followUpMessaggio = (params.follow_up_messaggio || '').trim() || null;
+
     try {
       const salvataggio = await fetch(
         `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}`,
-        { method: 'PATCH', headers, body: JSON.stringify({ info_generali: nuoveInfo }) }
+        {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            info_generali: nuoveInfo,
+            follow_up_attivo: followUpAttivo,
+            follow_up_dopo_ore: followUpDopoOre,
+            follow_up_max_messaggi: followUpMaxMessaggi,
+            follow_up_orario_da: followUpOrarioDa,
+            follow_up_orario_a: followUpOrarioA,
+            follow_up_messaggio: followUpMessaggio,
+          }),
+        }
       );
       if (!salvataggio.ok) {
         const errText = await salvataggio.text();
@@ -97,7 +120,7 @@ export default async function handler(req, res) {
   let config = null;
   try {
     const configRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=info_generali,clienti(nome_attivita)`,
+      `${SUPABASE_URL}/rest/v1/configurazioni_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&select=info_generali,follow_up_attivo,follow_up_dopo_ore,follow_up_max_messaggi,follow_up_orario_da,follow_up_orario_a,follow_up_messaggio,clienti(nome_attivita)`,
       { headers }
     );
     const configData = await configRes.json();
@@ -115,6 +138,16 @@ export default async function handler(req, res) {
   const nomeAttivita = config.clienti?.nome_attivita || 'Cliente';
   const infoAttuali = config.info_generali && typeof config.info_generali === 'object' ? config.info_generali : {};
   const salvatoOraOra = req.query && req.query.salvato === '1';
+
+  // Valori attuali follow-up (con i default della migration se mai valorizzati)
+  const fu = {
+    attivo: config.follow_up_attivo === true,
+    dopoOre: config.follow_up_dopo_ore ?? 24,
+    maxMessaggi: config.follow_up_max_messaggi ?? 2,
+    orarioDa: (config.follow_up_orario_da || '09:00').slice(0, 5),
+    orarioA: (config.follow_up_orario_a || '19:00').slice(0, 5),
+    messaggio: config.follow_up_messaggio || '',
+  };
 
   const campiHtml = CAMPI_FORM.map((campo) => {
     const valore = escapeHtml(infoAttuali[campo.chiave] || '');
@@ -163,6 +196,41 @@ export default async function handler(req, res) {
     <div class="card">
       <form method="POST" action="/api/info-cliente">
         ${campiHtml}
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+        <h2 style="font-size:1.1rem;margin-top:0;">Follow-up automatici</h2>
+        <p class="sub" style="margin-bottom:16px;">Se un cliente scrive ma non completa la richiesta, il sistema può scrivergli di nuovo automaticamente dopo un po' di silenzio. Si ferma da solo appena il cliente risponde.</p>
+
+        <label class="campo" style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="follow_up_attivo" ${fu.attivo ? 'checked' : ''} style="width:auto;" />
+          <span style="margin-bottom:0;">Attiva i follow-up automatici</span>
+        </label>
+
+        <label class="campo">
+          <span>Dopo quante ore di silenzio inviare un follow-up</span>
+          <input type="number" min="1" name="follow_up_dopo_ore" value="${fu.dopoOre}" />
+        </label>
+
+        <label class="campo">
+          <span>Numero massimo di follow-up per conversazione</span>
+          <input type="number" min="0" name="follow_up_max_messaggi" value="${fu.maxMessaggi}" />
+        </label>
+
+        <label class="campo">
+          <span>Orario consentito per l'invio (dalle)</span>
+          <input type="time" name="follow_up_orario_da" value="${fu.orarioDa}" />
+        </label>
+
+        <label class="campo">
+          <span>Orario consentito per l'invio (alle)</span>
+          <input type="time" name="follow_up_orario_a" value="${fu.orarioA}" />
+        </label>
+
+        <label class="campo">
+          <span>Messaggio del follow-up (lascia vuoto per il messaggio predefinito)</span>
+          <textarea name="follow_up_messaggio" rows="3" placeholder="Ciao! Siamo ancora a disposizione per la sua richiesta...">${escapeHtml(fu.messaggio)}</textarea>
+        </label>
+
         <button type="submit">Salva informazioni</button>
       </form>
     </div>
