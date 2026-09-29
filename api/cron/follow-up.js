@@ -1,8 +1,13 @@
 // api/cron/follow-up.js
 //
 // Follow-up automatici per lead non convertiti (migrations/006_follow_up.sql).
-// Chiamato periodicamente da Vercel Cron (vedi vercel.json, di default ogni
-// ora). Per ogni cliente con follow_up_attivo = true, cerca le richieste
+// Chiamato una volta al giorno da Vercel Cron (vedi vercel.json — limite del
+// piano Vercel Hobby: cron job più frequenti di 1/giorno falliscono il
+// deploy). Non è un problema funzionale: la logica sotto controlla comunque
+// ore trascorse e fascia oraria consentita ad ogni esecuzione, quindi un
+// solo passaggio al giorno (fissato dentro l'orario 09:00-19:00) basta a
+// individuare e inviare tutti i follow-up dovuti. Per ogni cliente con
+// follow_up_attivo = true, cerca le richieste
 // ferme allo stato "in_corso" da abbastanza tempo e invia un messaggio
 // WhatsApp proattivo (non una risposta a un messaggio in arrivo: qui
 // chiamiamo direttamente l'API REST di Twilio per l'invio).
