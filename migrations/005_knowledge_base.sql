@@ -67,3 +67,10 @@ $$;
 
 comment on table documents is 'Documenti caricati dal cliente (listino, FAQ, regolamento...) per la Knowledge Base RAG.';
 comment on table knowledge_chunks is 'Frammenti di documenti con embedding, usati per il retrieval nel webhook WhatsApp.';
+
+-- RLS attiva per coerenza con tutte le altre tabelle del progetto. Nessuna
+-- policy per anon/authenticated: solo la service_role key (usata sempre e
+-- solo lato server, mai esposta al client) può leggere/scrivere qui, esattamente
+-- come per richieste_clienti, configurazioni_cliente, event_log, ecc.
+alter table "public"."documents" enable row level security;
+alter table "public"."knowledge_chunks" enable row level security;
