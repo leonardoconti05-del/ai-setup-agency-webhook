@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { validaFirmaTwilio } from '../lib/twilio-signature.js';
 import { creaRequestId, logEvento } from '../lib/logger.js';
+import { embedQuery } from '../lib/embeddings.js';
 
 function escapeXml(text) {
   return String(text)
@@ -133,7 +134,11 @@ async function creaEvento(calendarId, slot, riepilogoDati, nomeAttivita) {
 }
 
 // ===== Prompt dinamici =====
-function buildSystemPrompt(config, nomeAttivita) {
+// contestoKB: testo già assemblato dai chunk più pertinenti trovati nella
+// Knowledge Base del cliente (vedi ricercaKnowledgeBase più sotto). Stringa
+// vuota se il cliente non ha ancora caricato documenti o se la ricerca non
+// ha trovato nulla di sufficientemente pertinente.
+function buildSystemPrompt(config, nomeAttivita, contestoKB = '') {
   const campi = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere : [];
   const listaCampi = campi.map((c, i) => `${i + 1}. ${c.campo}: ${c.domanda}`).join('\n');
   const orari = config.orari_apertura ? `\nORARI DI APERTURA\n${JSON.stringify(config.orari_apertura)}` : '';
@@ -153,6 +158,13 @@ function buildSystemPrompt(config, nomeAttivita) {
     : '';
   const sezioneInfo = infoGenerali ? `\nINFORMAZIONI SU ${nomeAttivita}\n${infoGenerali}` : '';
 
+  // Knowledge Base (RAG): frammenti di documenti caricati dal cliente
+  // (api/knowledge.js), selezionati per pertinenza rispetto al messaggio
+  // corrente. Complementare a INFORMAZIONI SU/ORARI, non li sostituisce.
+  const sezioneKB = contestoKB
+    ? `\nDOCUMENTAZIONE CARICATA DA ${nomeAttivita} (usa queste informazioni quando pertinenti, ma non citarle testualmente come "documento": integrale nella risposta in modo naturale)\n${contestoKB}`
+    : '';
+
   return `Sei l'assistente virtuale di ${nomeAttivita}, attivo su WhatsApp.
 
 RUOLO E TONO
@@ -162,6 +174,7 @@ COSA RACCOGLIERE (in ordine, salvo urgenze)
 ${listaCampi}
 ${orari}
 ${sezioneInfo}
+${sezioneKB}
 ${urgenza}
 
 SICUREZZA
@@ -173,8 +186,8 @@ DOMANDE FUORI SCRIPT
 Il cliente può fare domande non previste nella scaletta (es. "quali giorni posso venire", "posso venire quando voglio", "quanto costa", "dove siete", "siete aperti il sabato"). In questi casi:
 - Se la domanda riguarda QUANDO fissare l'appuntamento o la disponibilità di orari: NON proporre tu giorni o orari specifici, e NON dire che "lo studio/l'attività la contatterà" o simili — questa parte è gestita automaticamente da un altro sistema una volta raccolte tutte le informazioni. Rispondi con una frase neutra tipo "Le mostrerò gli orari disponibili appena avrò tutte le informazioni" e poi fai la prossima domanda mancante della lista COSA RACCOGLIERE.
 - Se la domanda riguarda gli orari di apertura e questi sono indicati sopra in ORARI DI APERTURA: rispondi usando quell'informazione.
-- Se la domanda riguarda prezzi, indirizzo, servizi o altro e questa informazione è presente sopra in INFORMAZIONI SU ${nomeAttivita}: usala per rispondere.
-- Se la domanda riguarda qualcosa che non hai tra le tue istruzioni (né sopra in INFORMAZIONI SU ${nomeAttivita} né altrove): dillo onestamente in una frase breve, senza inventare dettagli, poi torna alla prossima domanda mancante della lista.
+- Se la domanda riguarda prezzi, indirizzo, servizi o altro e questa informazione è presente sopra in INFORMAZIONI SU ${nomeAttivita} o in DOCUMENTAZIONE CARICATA: usala per rispondere.
+- Se la domanda riguarda qualcosa che non hai tra le tue istruzioni (né in INFORMAZIONI SU ${nomeAttivita}, né in DOCUMENTAZIONE CARICATA, né altrove): dillo onestamente in una frase breve, senza inventare dettagli, poi torna alla prossima domanda mancante della lista.
 - Rispondi sempre brevemente alla domanda del cliente prima di tornare alla scaletta: non ignorarla e non cambiare argomento bruscamente.
 
 COMPLETAMENTO (situazioni NON urgenti)
@@ -199,6 +212,37 @@ export function buildExtractionTool(config) {
     description: 'Registra i dati esplicitamente forniti dal cliente in tutta la conversazione fornita.',
     input_schema: { type: 'object', properties, required: [] },
   };
+}
+
+// ===== KNOWLEDGE BASE: retrieval per similarità (RAG) =====
+// Trasforma il messaggio del cliente in un embedding e cerca i chunk più
+// simili tra i documenti caricati DI QUESTO cliente (isolamento multi-tenant
+// applicato anche qui: la funzione match_knowledge_chunks in Supabase filtra
+// sempre per cliente_id, mai una ricerca "globale"). Best-effort: se
+// l'embedding o la ricerca falliscono (es. VOYAGE_API_KEY non configurata,
+// nessun documento ancora caricato), si prosegue semplicemente senza
+// contesto aggiuntivo — la Knowledge Base è un potenziamento, non un
+// requisito per rispondere.
+async function ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, domanda) {
+  try {
+    const embedding = await embedQuery(domanda);
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/match_knowledge_chunks`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ p_cliente_id: cliente_id, p_query_embedding: embedding, p_match_count: 4 }),
+    });
+    const chunk = await res.json();
+    if (!Array.isArray(chunk) || chunk.length === 0) return '';
+    // Soglia di similarità: sotto 0.5 il chunk è probabilmente irrilevante
+    // per la domanda (coseno tra 0 e 1) — meglio non includerlo che confondere
+    // il modello con informazioni fuori tema.
+    const pertinenti = chunk.filter((c) => typeof c.similarity === 'number' && c.similarity > 0.5);
+    if (pertinenti.length === 0) return '';
+    return pertinenti.map((c) => `- ${c.contenuto}`).join('\n');
+  } catch (e) {
+    console.error('Errore ricerca knowledge base (si prosegue senza contesto aggiuntivo):', e);
+    return '';
+  }
 }
 
 async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false) {
@@ -495,7 +539,10 @@ export default async function handler(req, res) {
     // ===== FLUSSO NORMALE: raccolta dati tramite Claude =====
     history.push({ role: 'user', content: messaggio });
 
-    const SYSTEM_PROMPT = buildSystemPrompt(config, nomeAttivita);
+    const contestoKB = await ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, messaggio);
+    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'knowledge_base', dettaglio: { trovato: contestoKB.length > 0 } });
+
+    const SYSTEM_PROMPT = buildSystemPrompt(config, nomeAttivita, contestoKB);
     const EXTRACTION_TOOL = buildExtractionTool(config);
 
     const chatResponse = await fetch('https://api.anthropic.com/v1/messages', {

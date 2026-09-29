@@ -166,6 +166,7 @@ export default async function handler(req, res) {
     }
     h1 { font-size: 24px; margin: 0; color: #111827; }
     .sottotitolo { color: #6b7280; font-size: 14px; margin-top: 4px; }
+    .nav-link { color: #2563eb; text-decoration: none; font-size: 14px; margin-top: 6px; display: inline-block; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; }
     .stat-card {
       background: white;
@@ -233,6 +234,7 @@ export default async function handler(req, res) {
     <div>
       <h1>📋 ${escapeHtml(nomeAttivita)}</h1>
       <div class="sottotitolo">Richieste ricevute via WhatsApp</div>
+      <a class="nav-link" href="/api/knowledge">📚 Gestisci Knowledge Base &rarr;</a>
     </div>
     <div class="stats">
       <div class="stat-card"><div class="stat-num">${contaTotali}</div><div class="stat-label">Totali</div></div>

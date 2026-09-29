@@ -1,0 +1,13 @@
+{
+  "name": "ai-setup-agency-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Webhook WhatsApp (Twilio) e dashboard per l'agenzia di setup agenti AI — deployato su Vercel.",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}
