@@ -237,7 +237,7 @@ export default async function handler(req, res) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="30">
-  <title>Gestionale — ${escapeHtml(nomeAttivita)}</title>
+  <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -365,8 +365,8 @@ export default async function handler(req, res) {
       </div>
     </div>
     <nav>
-      <a href="#panoramica" class="tab-link attivo" data-tab="panoramica">Panoramica</a>
-      <a href="#servizi-personale" class="tab-link" data-tab="servizi-personale">Servizi &amp; Personale</a>
+      <a href="#panoramica" class="tab-link" data-tab="panoramica">Panoramica</a>
+      <a href="#servizi-personale" class="tab-link attivo" data-tab="servizi-personale">Servizi &amp; Personale</a>
       <a href="#richieste" class="tab-link" data-tab="richieste">${escapeHtml(et.eventoPlurale)}</a>
       <a href="/api/knowledge">📚 Knowledge Base</a>
       <a href="/api/info-cliente">⚙️ Impostazioni</a>
@@ -374,7 +374,7 @@ export default async function handler(req, res) {
   </div>
 
   <div class="wrap">
-    <div class="tab-pannello attivo" data-pannello="panoramica">
+    <div class="tab-pannello" data-pannello="panoramica">
       <div class="stats">
         <div class="stat-card"><div class="stat-num">${contaTotali}</div><div class="stat-label">${escapeHtml(et.clientiPlurale)} totali</div></div>
         <div class="stat-card"><div class="stat-num" style="color:#dc2626">${contaUrgenti}</div><div class="stat-label">Urgenti</div></div>
@@ -399,7 +399,7 @@ export default async function handler(req, res) {
       </div>
     </div>
 
-    <div class="tab-pannello" data-pannello="servizi-personale">
+    <div class="tab-pannello attivo" data-pannello="servizi-personale">
       <div class="griglia-sezioni">
         <div class="card">
           <h2>🧾 Servizi offerti</h2>

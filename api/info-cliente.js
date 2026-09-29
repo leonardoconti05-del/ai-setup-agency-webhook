@@ -313,7 +313,7 @@ export default async function handler(req, res) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Gestionale — ${escapeHtml(nomeAttivita)}</title>
+<title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
 <style>
   :root { color-scheme: light; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f6f8; margin: 0; padding: 24px; color: #1a1a1a; }
