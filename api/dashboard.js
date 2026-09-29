@@ -260,9 +260,12 @@ export default async function handler(req, res) {
     .topbar .brand-icona { font-size: 22px; }
     .topbar h1 { font-size: 17px; margin: 0; font-weight: 600; }
     .topbar .settore { font-size: 12px; color: #9ca3af; }
-    .topbar nav { display: flex; gap: 18px; flex-wrap: wrap; }
-    .topbar nav a { color: #d1d5db; text-decoration: none; font-size: 13px; }
-    .topbar nav a:hover { color: white; }
+    .topbar nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .topbar nav a { color: #d1d5db; text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 6px; }
+    .topbar nav a:hover { color: white; background: rgba(255,255,255,0.06); }
+    .topbar nav a.tab-link.attivo { color: white; background: #2563eb; font-weight: 600; }
+    .tab-pannello { display: none; }
+    .tab-pannello.attivo { display: block; }
     .wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 40px; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
     .stat-card {
@@ -362,65 +365,94 @@ export default async function handler(req, res) {
       </div>
     </div>
     <nav>
-      <a href="#panoramica">Panoramica</a>
-      <a href="#servizi-personale">Servizi &amp; Personale</a>
-      <a href="#richieste">${escapeHtml(et.eventoPlurale)}</a>
+      <a href="#panoramica" class="tab-link attivo" data-tab="panoramica">Panoramica</a>
+      <a href="#servizi-personale" class="tab-link" data-tab="servizi-personale">Servizi &amp; Personale</a>
+      <a href="#richieste" class="tab-link" data-tab="richieste">${escapeHtml(et.eventoPlurale)}</a>
       <a href="/api/knowledge">📚 Knowledge Base</a>
       <a href="/api/info-cliente">⚙️ Impostazioni</a>
     </nav>
   </div>
 
   <div class="wrap">
-    <div class="stats" id="panoramica">
-      <div class="stat-card"><div class="stat-num">${contaTotali}</div><div class="stat-label">${escapeHtml(et.clientiPlurale)} totali</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#dc2626">${contaUrgenti}</div><div class="stat-label">Urgenti</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#d97706">${contaInCorso}</div><div class="stat-label">In corso</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#16a34a">${contaCompletate}</div><div class="stat-label">Completate</div></div>
-    </div>
+    <div class="tab-pannello attivo" data-pannello="panoramica">
+      <div class="stats">
+        <div class="stat-card"><div class="stat-num">${contaTotali}</div><div class="stat-label">${escapeHtml(et.clientiPlurale)} totali</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#dc2626">${contaUrgenti}</div><div class="stat-label">Urgenti</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#d97706">${contaInCorso}</div><div class="stat-label">In corso</div></div>
+        <div class="stat-card"><div class="stat-num" style="color:#16a34a">${contaCompletate}</div><div class="stat-label">Completate</div></div>
+      </div>
 
-    <div class="card" style="margin-bottom:20px;">
-      <h2>💶 Finanziario</h2>
-      <p class="desc">Dati reali dalle conversazioni WhatsApp — nessuna stima non richiesta.</p>
-      <div class="analytics-grid">
-        <div class="analytics-num-blocco"><div class="analytics-num">${messaggiTotali}</div><div class="analytics-label">Messaggi ricevuti</div></div>
-        <div class="analytics-num-blocco"><div class="analytics-num">${contaTotali}</div><div class="analytics-label">Conversazioni</div></div>
-        <div class="analytics-num-blocco"><div class="analytics-num">${contaLead}</div><div class="analytics-label">Lead (dati raccolti)</div></div>
-        <div class="analytics-num-blocco"><div class="analytics-num">${contaAppuntamenti}</div><div class="analytics-label">${escapeHtml(et.eventoPlurale)} confermati</div></div>
-        <div class="analytics-num-blocco"><div class="analytics-num">${tassoConversione}%</div><div class="analytics-label">Conversione lead&rarr;${et.evento.toLowerCase()}</div></div>
-        ${roiStimato != null ? `<div class="analytics-num-blocco"><div class="analytics-num" style="color:#16a34a">€${roiStimato.toLocaleString('it-IT')}</div><div class="analytics-label">Valore stimato generato*</div></div>` : ''}
-      </div>
-      ${roiStimato != null
-        ? `<p class="analytics-nota">*Stima basata sul valore medio che hai indicato (€${valoreMedioCliente.toLocaleString('it-IT')} per ${et.evento.toLowerCase()}) — non è fatturato garantito.</p>`
-        : `<p class="analytics-nota">Vuoi vedere anche una stima del valore generato? <a href="/api/info-cliente">Imposta il valore medio</a>.</p>`}
-    </div>
-
-    <div class="griglia-sezioni" id="servizi-personale">
-      <div class="card">
-        <h2>🧾 Servizi offerti</h2>
-        <p class="desc">Il tuo listino. <a href="/api/info-cliente#servizi" style="color:#2563eb;text-decoration:none;">Gestisci &rarr;</a></p>
-        ${serviziHtml}
-      </div>
-      <div class="card">
-        <h2>👥 Personale</h2>
-        <p class="desc">Il tuo staff. <a href="/api/info-cliente#personale" style="color:#2563eb;text-decoration:none;">Gestisci &rarr;</a></p>
-        ${personaleHtml}
-      </div>
-      <div class="card">
-        <h2>🕒 Orari di apertura</h2>
-        <p class="desc">Usati anche dal bot WhatsApp. <a href="/api/info-cliente" style="color:#2563eb;text-decoration:none;">Modifica &rarr;</a></p>
-        <div class="griglia-orari-mini">${orariHtml}</div>
+      <div class="card" style="margin-bottom:20px;">
+        <h2>💶 Finanziario</h2>
+        <p class="desc">Dati reali dalle conversazioni WhatsApp — nessuna stima non richiesta.</p>
+        <div class="analytics-grid">
+          <div class="analytics-num-blocco"><div class="analytics-num">${messaggiTotali}</div><div class="analytics-label">Messaggi ricevuti</div></div>
+          <div class="analytics-num-blocco"><div class="analytics-num">${contaTotali}</div><div class="analytics-label">Conversazioni</div></div>
+          <div class="analytics-num-blocco"><div class="analytics-num">${contaLead}</div><div class="analytics-label">Lead (dati raccolti)</div></div>
+          <div class="analytics-num-blocco"><div class="analytics-num">${contaAppuntamenti}</div><div class="analytics-label">${escapeHtml(et.eventoPlurale)} confermati</div></div>
+          <div class="analytics-num-blocco"><div class="analytics-num">${tassoConversione}%</div><div class="analytics-label">Conversione lead&rarr;${et.evento.toLowerCase()}</div></div>
+          ${roiStimato != null ? `<div class="analytics-num-blocco"><div class="analytics-num" style="color:#16a34a">€${roiStimato.toLocaleString('it-IT')}</div><div class="analytics-label">Valore stimato generato*</div></div>` : ''}
+        </div>
+        ${roiStimato != null
+          ? `<p class="analytics-nota">*Stima basata sul valore medio che hai indicato (€${valoreMedioCliente.toLocaleString('it-IT')} per ${et.evento.toLowerCase()}) — non è fatturato garantito.</p>`
+          : `<p class="analytics-nota">Vuoi vedere anche una stima del valore generato? <a href="/api/info-cliente">Imposta il valore medio</a>.</p>`}
       </div>
     </div>
 
-    <div class="sezione-titolo" id="richieste">📋 ${escapeHtml(et.eventoPlurale)} recenti</div>
-    <div class="card card-tabella">
-      ${lista.length > 0 ? `<table>
-        <tr><th>Stato</th><th>Dati raccolti</th><th>Telefono</th><th>Aggiornato</th><th>Azioni</th></tr>
-        ${righe}
-      </table>` : `<div class="empty">Nessuna richiesta ancora ricevuta.</div>`}
+    <div class="tab-pannello" data-pannello="servizi-personale">
+      <div class="griglia-sezioni">
+        <div class="card">
+          <h2>🧾 Servizi offerti</h2>
+          <p class="desc">Il tuo listino. <a href="/api/info-cliente#servizi" style="color:#2563eb;text-decoration:none;">Gestisci &rarr;</a></p>
+          ${serviziHtml}
+        </div>
+        <div class="card">
+          <h2>👥 Personale</h2>
+          <p class="desc">Il tuo staff. <a href="/api/info-cliente#personale" style="color:#2563eb;text-decoration:none;">Gestisci &rarr;</a></p>
+          ${personaleHtml}
+        </div>
+        <div class="card">
+          <h2>🕒 Orari di apertura</h2>
+          <p class="desc">Usati anche dal bot WhatsApp. <a href="/api/info-cliente" style="color:#2563eb;text-decoration:none;">Modifica &rarr;</a></p>
+          <div class="griglia-orari-mini">${orariHtml}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pannello" data-pannello="richieste">
+      <div class="sezione-titolo" style="margin-top:0;">📋 ${escapeHtml(et.eventoPlurale)} recenti</div>
+      <div class="card card-tabella">
+        ${lista.length > 0 ? `<table>
+          <tr><th>Stato</th><th>Dati raccolti</th><th>Telefono</th><th>Aggiornato</th><th>Azioni</th></tr>
+          ${righe}
+        </table>` : `<div class="empty">Nessuna richiesta ancora ricevuta.</div>`}
+      </div>
     </div>
     <footer>Aggiornamento automatico ogni 30 secondi</footer>
   </div>
+
+  <script>
+    (function () {
+      var link = document.querySelectorAll('.tab-link');
+      var pannelli = document.querySelectorAll('.tab-pannello');
+      function attiva(tab) {
+        pannelli.forEach(function (p) { p.classList.toggle('attivo', p.getAttribute('data-pannello') === tab); });
+        link.forEach(function (l) { l.classList.toggle('attivo', l.getAttribute('data-tab') === tab); });
+      }
+      link.forEach(function (l) {
+        l.addEventListener('click', function (e) {
+          e.preventDefault();
+          attiva(l.getAttribute('data-tab'));
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+      // Se l'URL arriva già con un'ancora (es. da un link esterno), apri quella scheda.
+      var iniziale = window.location.hash.replace('#', '');
+      if (iniziale && document.querySelector('.tab-pannello[data-pannello="' + iniziale + '"]')) {
+        attiva(iniziale);
+      }
+    })();
+  </script>
 </body>
 </html>`;
 
