@@ -237,6 +237,7 @@ export default async function handler(req, res) {
         <label class="campo">
           <span>Messaggio del follow-up (lascia vuoto per il messaggio predefinito)</span>
           <textarea name="follow_up_messaggio" rows="3" placeholder="Ciao! Siamo ancora a disposizione per la sua richiesta...">${escapeHtml(fu.messaggio)}</textarea>
+          <small style="color:#6b7280;display:block;margin-top:4px;">Nota: per policy WhatsApp, i follow-up inviati oltre 24 ore dopo l'ultimo messaggio del cliente possono usare solo un testo fisso pre-approvato da Meta. Questo campo personalizzato viene usato solo finché quel template non è configurato lato agenzia.</small>
         </label>
 
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />

@@ -23,24 +23,55 @@
 //   più "in attesa di follow-up" per il ciclo attuale, dato che la
 //   condizione ottimistica su updated_at fallisce se la riga è cambiata
 //   dopo la lettura.
+//
+// IMPORTANTE — finestra delle 24 ore di WhatsApp:
+// WhatsApp/Meta permette a un'azienda di scrivere per prima a un cliente con
+// testo libero SOLO entro 24 ore dall'ultimo messaggio ricevuto da quel
+// cliente. Il follow-up per definizione scatta dopo un periodo di silenzio
+// (default 24 ore), quindi nella maggior parte dei casi finisce FUORI da
+// quella finestra: un invio con "Body" libero verrebbe rifiutato da Twilio
+// (errore 63016). Per questo, se è configurato TWILIO_CONTENT_SID_FOLLOWUP
+// (il Content SID di un template WhatsApp pre-approvato da Meta, con una
+// sola variabile {{1}} = nome attività), il messaggio viene inviato tramite
+// quel template invece che come testo libero — funziona anche fuori dalla
+// finestra. Senza questa variabile configurata, il cron usa comunque il
+// testo libero come fallback (utile solo per test entro le 24 ore) e logga
+// chiaramente l'errore 63016 quando Twilio lo rifiuta, invece di fallire in
+// modo silenzioso. Istruzioni per creare il template: docs/DECISIONS.md.
 
 import { creaRequestId, logEvento } from '../../lib/logger.js';
 
 const MESSAGGIO_DEFAULT = (nomeAttivita) =>
   `Ciao! Siamo ancora a disposizione per la sua richiesta a ${nomeAttivita}. Se ha bisogno di altro tempo o ha domande, scriva pure qui.`;
 
-async function inviaMessaggioWhatsApp(numeroDa, numeroA, testo) {
+// nomeAttivita è sempre passato: serve sia per il testo libero di fallback
+// sia come variabile {{1}} del template approvato, quando configurato.
+async function inviaMessaggioWhatsApp(numeroDa, numeroA, testo, nomeAttivita) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!accountSid || !authToken) {
     throw new Error('TWILIO_ACCOUNT_SID o TWILIO_AUTH_TOKEN mancanti: impossibile inviare messaggi proattivi.');
   }
+  const contentSid = process.env.TWILIO_CONTENT_SID_FOLLOWUP;
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
-  const body = new URLSearchParams({
-    From: `whatsapp:${numeroDa}`,
-    To: `whatsapp:${numeroA}`,
-    Body: testo,
-  });
+
+  const parametri = { From: `whatsapp:${numeroDa}`, To: `whatsapp:${numeroA}` };
+  if (contentSid) {
+    // Template WhatsApp pre-approvato: valido anche fuori dalla finestra
+    // delle 24 ore. Il testo effettivo lo decide il template approvato da
+    // Meta, non il campo "testo" qui passato — per questo un eventuale
+    // messaggio personalizzato per cliente (follow_up_messaggio) non viene
+    // usato in questa modalità (vedi nota in docs/DECISIONS.md).
+    parametri.ContentSid = contentSid;
+    parametri.ContentVariables = JSON.stringify({ '1': nomeAttivita });
+  } else {
+    // Fallback: testo libero, valido solo entro 24 ore dall'ultimo
+    // messaggio del cliente. Fuori da quella finestra Twilio risponde con
+    // l'errore 63016, gestito esplicitamente dal chiamante.
+    parametri.Body = testo;
+  }
+  const body = new URLSearchParams(parametri);
+
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -51,6 +82,13 @@ async function inviaMessaggioWhatsApp(numeroDa, numeroA, testo) {
   });
   const data = await res.json();
   if (!res.ok) {
+    if (data && Number(data.code) === 63016) {
+      throw new Error(
+        'Twilio ha rifiutato il messaggio (errore 63016): fuori dalla finestra delle 24 ore e nessun template ' +
+        'approvato configurato. Imposta TWILIO_CONTENT_SID_FOLLOWUP con il Content SID di un template WhatsApp ' +
+        'approvato da Meta — vedi docs/DECISIONS.md.'
+      );
+    }
     throw new Error(`Errore invio Twilio (${res.status}): ${JSON.stringify(data)}`);
   }
   return data;
@@ -134,7 +172,12 @@ export default async function handler(req, res) {
           const testo = (config.follow_up_messaggio && config.follow_up_messaggio.trim())
             || MESSAGGIO_DEFAULT(config.nome_attivita || 'la nostra attività');
 
-          await inviaMessaggioWhatsApp(config.numero_whatsapp, richiesta.numero_utente, testo);
+          await inviaMessaggioWhatsApp(
+            config.numero_whatsapp,
+            richiesta.numero_utente,
+            testo,
+            config.nome_attivita || 'la nostra attività'
+          );
 
           // Scrittura condizionata: se la richiesta è stata modificata dopo
           // la lettura (es. il cliente ha appena risposto), questa PATCH non

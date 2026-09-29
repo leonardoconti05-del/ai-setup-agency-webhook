@@ -144,6 +144,55 @@ limitare. L'evento viene comunque loggato per restare visibile.
 
 ---
 
+## P2-1 — Follow-up automatici e la finestra delle 24 ore di WhatsApp
+
+**Il problema.** WhatsApp Business (tramite Twilio) impone che un'azienda
+possa scrivere per prima a un cliente con testo libero **solo entro 24 ore**
+dall'ultimo messaggio ricevuto da quel cliente. Passata quella finestra,
+Meta richiede un "template" di messaggio pre-approvato, con eventuali
+variabili ma testo fisso — non testo libero arbitrario.
+
+Il follow-up automatico (`migrations/006_follow_up.sql`,
+`api/cron/follow-up.js`) scatta per definizione dopo un periodo di silenzio
+del cliente (default: 24 ore) — cade quindi quasi sempre **fuori** dalla
+finestra consentita. Un invio con testo libero in quel momento viene
+rifiutato da Twilio con l'errore `63016`, anche se tutto il resto del
+codice è corretto: è un vincolo della piattaforma WhatsApp, non un bug
+risolvibile lato applicazione.
+
+**La soluzione implementata.** `api/cron/follow-up.js` supporta l'invio
+tramite un template WhatsApp pre-approvato, attivato impostando la
+variabile d'ambiente `TWILIO_CONTENT_SID_FOLLOWUP` (vedi
+`docs/ENVIRONMENT_VARIABLES.md`). Se impostata, il messaggio viene inviato
+con `ContentSid` + `ContentVariables` (Content API di Twilio) invece che
+con `Body` libero — valido anche fuori dalla finestra delle 24 ore. Se non
+impostata, il cron usa il testo libero come fallback (utile solo per test
+entro le 24 ore) e logga in modo esplicito l'errore 63016 quando si
+verifica, invece di fallire silenziosamente.
+
+**Limite noto.** Il testo del template è fisso e approvato da Meta con una
+sola variabile (`{{1}}` = nome attività): il campo "messaggio personalizzato
+del follow-up" nella dashboard cliente (`api/info-cliente.js`) resta quindi
+inutilizzato quando il template è configurato — non è possibile un testo
+libero per-cliente fuori dalla finestra delle 24 ore, per policy di
+WhatsApp, non per una limitazione del codice.
+
+**Come creare e sottomettere il template (richiede un'azione manuale, non
+automatizzabile da qui):**
+1. Vai su [Twilio Console → Content Template Builder](https://console.twilio.com/us1/develop/sms/content-template-builder) (serve un account Twilio con un WhatsApp Sender già approvato).
+2. Crea un nuovo template di tipo "WhatsApp" con testo, ad es.:
+   `Ciao! Siamo ancora a disposizione per la sua richiesta a {{1}}. Se ha bisogno di altro tempo o ha domande, scriva pure qui.`
+3. Sottometti il template per l'approvazione WhatsApp (categoria consigliata: "Utility"). L'approvazione da parte di Meta richiede in genere da qualche ora a un giorno.
+4. Una volta approvato, copia il **Content SID** (inizia con `HX...`) e impostalo come `TWILIO_CONTENT_SID_FOLLOWUP` su Vercel.
+5. Redeploy: da quel momento i follow-up useranno il template invece del testo libero.
+
+Finché il template non è pronto, i follow-up restano attivi ma andranno
+verificati con cautela (probabile errore 63016 fuori dalla finestra delle
+24 ore) — visibile in `event_log` con `fase = 'follow_up_inviato'` e
+`stato = 'errore'`.
+
+---
+
 ## Altre decisioni minori, per completezza
 
 - **Deduplicazione messaggi Twilio**: Twilio può ritrasmettere lo stesso
