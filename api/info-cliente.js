@@ -314,10 +314,10 @@ export default async function handler(req, res) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
+<title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root { color-scheme: light; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
   .container { max-width: 720px; margin: 0 auto; }
   a.torna { color: #4f46e5; text-decoration: none; font-size: 14px; }
   h1 { font-size: 1.4rem; margin: 8px 0 2px; letter-spacing: -.01em; }

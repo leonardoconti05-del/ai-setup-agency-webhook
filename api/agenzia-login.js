@@ -21,8 +21,8 @@ function escapeHtml(str) {
 
 function paginaLogin({ errore } = {}) {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Setup Agency — Accesso agenzia</title></head>
-  <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at top, #1e293b, #0f172a);margin:0;-webkit-font-smoothing:antialiased;">
+  <title>AI Setup Agency — Accesso agenzia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></head>
+  <body style="font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at top, #1e293b, #0f172a);margin:0;-webkit-font-smoothing:antialiased;">
     <div style="background:white;padding:36px 32px;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.35);max-width:340px;width:100%;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4f46e5;margin-bottom:6px;">AI Setup Agency</div>
       <h2 style="margin:0 0 4px;color:#0f172a;display:flex;align-items:center;gap:8px;"><span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;border-radius:8px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;">${icon('building', { size: 15 })}</span> Area amministrativa</h2>
