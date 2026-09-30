@@ -382,10 +382,10 @@ export default async function handler(req, res) {
   <div class="app-shell">
     <div class="sidebar">
       <div class="sidebar-brand">
-        <span class="icona">${et.icona}</span>
+        <span class="icona">🤖</span>
         <div>
-          <h1>${escapeHtml(nomeAttivita)}</h1>
-          <div class="settore">${escapeHtml(nomeSettore(settore))}</div>
+          <h1>AI Setup Agency</h1>
+          <div class="settore">${et.icona} ${escapeHtml(nomeAttivita)} · ${escapeHtml(nomeSettore(settore))}</div>
         </div>
       </div>
 

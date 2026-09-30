@@ -13,7 +13,7 @@
 // non prima.
 
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
-import { etichetteSettore, nomeSettore } from '../lib/settori.js';
+import { etichetteSettore, nomeSettore, SETTORI } from '../lib/settori.js';
 
 function escapeHtml(text) {
   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -118,6 +118,54 @@ export default async function handler(req, res) {
         </tr>`;
       }).join('');
 
+    // Clienti raggruppati per settore, per l'elenco navigabile di TUTTI i
+    // tipi di attività (anche quelli senza ancora nessun cliente) — cliccando
+    // un settore si vede chi lo usa, e da lì si entra nei suoi
+    // servizi/personale/orari (api/agenzia-cliente.js).
+    const clientiPerSettore = {};
+    for (const r of righeClienti) {
+      const chiave = r.settore || '(non impostato)';
+      (clientiPerSettore[chiave] || (clientiPerSettore[chiave] = [])).push(r);
+    }
+    const chiaviSettoriConClienti = Object.keys(clientiPerSettore).filter((k) => k !== '(non impostato)' && !SETTORI[k]);
+    const chiaviSettoriDaMostrare = [...Object.keys(SETTORI), ...chiaviSettoriConClienti];
+
+    const direttorioSettoriHtml = chiaviSettoriDaMostrare
+      .map((chiave, i) => {
+        const et = etichetteSettore(chiave);
+        const clientiSettore = clientiPerSettore[chiave] || [];
+        const clientiHtml = clientiSettore.length > 0
+          ? `<ul class="lista-clienti-settore">${clientiSettore.map((c) => `
+              <li>
+                <a href="/api/agenzia-cliente?cliente_id=${encodeURIComponent(c.id)}">${escapeHtml(c.nome)}</a>
+                ${!c.attivo ? '<span class="badge-off">Non attivo</span>' : ''}
+                <span class="mini-stat">${c.totale} richieste · ${c.appuntamenti} ${et.eventoPlurale.toLowerCase()}</span>
+              </li>`).join('')}</ul>`
+          : `<div class="empty-settore">Nessun cliente ancora in questo settore.</div>`;
+        return `<div class="settore-riga">
+          <button type="button" class="settore-sommario" data-toggle="settore-${i}">
+            <span class="settore-icona">${et.icona}</span>
+            <span class="settore-nome">${escapeHtml(nomeSettore(chiave))}</span>
+            <span class="settore-conteggio">${clientiSettore.length}</span>
+            <span class="settore-freccia">▾</span>
+          </button>
+          <div class="settore-clienti" id="settore-${i}">${clientiHtml}</div>
+        </div>`;
+      }).join('');
+    const nonImpostatoClienti = clientiPerSettore['(non impostato)'] || [];
+    const direttorioNonImpostatoHtml = nonImpostatoClienti.length > 0
+      ? `<div class="settore-riga">
+          <button type="button" class="settore-sommario" data-toggle="settore-non-impostato">
+            <span class="settore-icona">🏢</span>
+            <span class="settore-nome">Settore non impostato</span>
+            <span class="settore-conteggio">${nonImpostatoClienti.length}</span>
+            <span class="settore-freccia">▾</span>
+          </button>
+          <div class="settore-clienti" id="settore-non-impostato"><ul class="lista-clienti-settore">${nonImpostatoClienti.map((c) => `
+            <li><a href="/api/agenzia-cliente?cliente_id=${encodeURIComponent(c.id)}">${escapeHtml(c.nome)}</a></li>`).join('')}</ul></div>
+        </div>`
+      : '';
+
     // KPI totali agenzia
     const totClienti = righeClienti.length;
     const totClientiAttivi = righeClienti.filter((r) => r.attivo).length;
@@ -169,6 +217,25 @@ export default async function handler(req, res) {
     .badge-off { display: inline-block; background: #f3f4f6; color: #6b7280; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
     .empty { text-align: center; padding: 50px 20px; color: #9ca3af; }
     footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 20px; }
+    /* Direttorio settori (tutti i 29 tipi di attività, navigabile) */
+    .settore-riga { border-bottom: 1px solid #f0f1f3; }
+    .settore-riga:last-child { border-bottom: none; }
+    .settore-sommario { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; background: none; border: none; cursor: pointer; font: inherit; text-align: left; }
+    .settore-sommario:hover { background: #fafafa; }
+    .settore-icona { font-size: 17px; }
+    .settore-nome { flex: 1; font-size: 14px; font-weight: 600; color: #1f2937; }
+    .settore-conteggio { background: #f3f4f6; color: #374151; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
+    .settore-freccia { color: #9ca3af; transition: transform .15s; }
+    .settore-riga.aperta .settore-freccia { transform: rotate(180deg); }
+    .settore-clienti { display: none; padding: 0 16px 14px 47px; }
+    .settore-riga.aperta .settore-clienti { display: block; }
+    .lista-clienti-settore { list-style: none; margin: 0; padding: 0; }
+    .lista-clienti-settore li { padding: 7px 0; border-bottom: 1px solid #f6f7f8; font-size: 13.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .lista-clienti-settore li:last-child { border-bottom: none; }
+    .lista-clienti-settore a { color: #2563eb; text-decoration: none; font-weight: 600; }
+    .lista-clienti-settore a:hover { text-decoration: underline; }
+    .mini-stat { color: #9ca3af; font-size: 12px; margin-left: auto; }
+    .empty-settore { color: #9ca3af; font-size: 13px; padding: 6px 0; font-style: italic; }
   </style>
 </head>
 <body>
@@ -184,6 +251,12 @@ export default async function handler(req, res) {
       <div class="stat-card"><div class="stat-num">${totRichieste}</div><div class="stat-label">Richieste totali</div></div>
       <div class="stat-card"><div class="stat-num">${totAppuntamenti}</div><div class="stat-label">Appuntamenti confermati</div></div>
       <div class="stat-card"><div class="stat-num">${totFollowUpAttivi}</div><div class="stat-label">Con follow-up attivi</div></div>
+    </div>
+
+    <div class="sezione-titolo">📁 Tipi di attività</div>
+    <p style="color:#6b7280;font-size:13px;margin:-6px 0 12px;">Tutti i ${Object.keys(SETTORI).length} settori supportati. Apri un tipo di attività per vedere i clienti che lo usano ed entrare nei loro servizi, personale e orari.</p>
+    <div class="card">
+      ${direttorioSettoriHtml}${direttorioNonImpostatoHtml}
     </div>
 
     <div class="sezione-titolo">📊 Per settore</div>
@@ -203,6 +276,14 @@ export default async function handler(req, res) {
     </div>
     <footer>Aggiornamento automatico ogni 60 secondi</footer>
   </div>
+
+  <script>
+    document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.closest('.settore-riga').classList.toggle('aperta');
+      });
+    });
+  </script>
 </body>
 </html>`;
 
