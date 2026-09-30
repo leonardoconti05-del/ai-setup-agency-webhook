@@ -481,6 +481,10 @@ export default async function handler(req, res) {
           await creaEvento(config.google_calendar_id, slotObj, datiPrecedenti, nomeAttivita);
           reply = `Perfetto, appuntamento confermato per ${formattaSlot(slotObj)}. A presto!`;
           datiPrecedenti._fase = 'confermato';
+          // Salviamo l'orario scelto (non solo il fatto che sia "confermato"):
+          // prima andava perso subito dopo — nessuna pagina poteva mostrare
+          // "prossimi appuntamenti" reali senza inventare una data.
+          datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
           delete datiPrecedenti._slotOptions;
           await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar' });
         } catch (e) {
