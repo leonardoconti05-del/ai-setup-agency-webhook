@@ -199,10 +199,25 @@ export default async function handler(req, res) {
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f1f2f6; color: #111827; }
-    .topbar { background: #111827; color: white; padding: 16px 28px; }
-    .topbar h1 { margin: 0; font-size: 18px; }
-    .topbar .sub { color: #9ca3af; font-size: 12px; margin-top: 2px; }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px 40px; }
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; flex-shrink: 0; background: #111827; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
+    .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
+    .sidebar-brand .icona { font-size: 22px; }
+    .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; }
+    .sidebar-brand .settore { font-size: 11px; color: #9ca3af; }
+    .sidebar-group { margin-bottom: 14px; }
+    .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
+    .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+    .sidebar-link:hover { background: rgba(255,255,255,.06); color: white; }
+    .sidebar-link.attivo { background: #2563eb; color: white; font-weight: 600; }
+    .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
+    .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
+    .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
+    .main-titolo { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+    .main-sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
+    .tab-pannello { display: none; }
+    .tab-pannello.attivo { display: block; }
+    .wrap { max-width: 1200px; margin: 0; padding: 0; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
     .stat-card { background: white; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); text-align: center; flex: 1; min-width: 110px; }
     .stat-num { font-size: 26px; font-weight: 700; }
@@ -236,53 +251,103 @@ export default async function handler(req, res) {
     .lista-clienti-settore a:hover { text-decoration: underline; }
     .mini-stat { color: #9ca3af; font-size: 12px; margin-left: auto; }
     .empty-settore { color: #9ca3af; font-size: 13px; padding: 6px 0; font-style: italic; }
+    @media (max-width: 860px) {
+      .app-shell { flex-direction: column; }
+      .sidebar { width: 100%; height: auto; position: static; }
+      .main { padding: 20px; }
+    }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <h1>🏢 Dashboard agenzia — tutti i clienti</h1>
-    <div class="sub">Vista aggregata, non visibile ai singoli clienti</div>
-  </div>
-  <div class="wrap">
-    <div class="stats">
-      <div class="stat-card"><div class="stat-num">${totClienti}</div><div class="stat-label">Clienti totali</div></div>
-      <div class="stat-card"><div class="stat-num" style="color:#16a34a">${totClientiAttivi}</div><div class="stat-label">Attivi</div></div>
-      <div class="stat-card"><div class="stat-num">${settoriCoperti}</div><div class="stat-label">Settori coperti</div></div>
-      <div class="stat-card"><div class="stat-num">${totRichieste}</div><div class="stat-label">Richieste totali</div></div>
-      <div class="stat-card"><div class="stat-num">${totAppuntamenti}</div><div class="stat-label">Appuntamenti confermati</div></div>
-      <div class="stat-card"><div class="stat-num">${totFollowUpAttivi}</div><div class="stat-label">Con follow-up attivi</div></div>
+  <div class="app-shell">
+    <div class="sidebar">
+      <div class="sidebar-brand">
+        <span class="icona">🏢</span>
+        <div>
+          <h1>AI Setup Agency</h1>
+          <div class="settore">Area amministrativa</div>
+        </div>
+      </div>
+
+      <div class="sidebar-group">
+        <a href="#panoramica" class="sidebar-link tab-link attivo" data-tab="panoramica">🏠 Panoramica</a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-titolo">Struttura</div>
+        <a href="#settori" class="sidebar-link tab-link" data-tab="settori">📁 Tipi di attività <span class="conteggio">${Object.keys(SETTORI).length}</span></a>
+      </div>
     </div>
 
-    <div class="sezione-titolo">📁 Tipi di attività</div>
-    <p style="color:#6b7280;font-size:13px;margin:-6px 0 12px;">Tutti i ${Object.keys(SETTORI).length} settori supportati. Apri un tipo di attività per vedere i clienti che lo usano ed entrare nei loro servizi, personale e orari.</p>
-    <div class="card">
-      ${direttorioSettoriHtml}${direttorioNonImpostatoHtml}
-    </div>
+    <div class="main">
+      <div class="tab-pannello attivo" data-pannello="panoramica">
+        <div class="main-titolo">🏢 Dashboard agenzia</div>
+        <p class="main-sub">Vista aggregata su tutti i clienti — non visibile ai singoli clienti.</p>
 
-    <div class="sezione-titolo">📊 Per settore</div>
-    <div class="card">
-      ${righeSettori ? `<table>
-        <tr><th>Settore</th><th>Clienti</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th></tr>
-        ${righeSettori}
-      </table>` : '<div class="empty">Nessun dato ancora.</div>'}
-    </div>
+        <div class="stats">
+          <div class="stat-card"><div class="stat-num">${totClienti}</div><div class="stat-label">Clienti totali</div></div>
+          <div class="stat-card"><div class="stat-num" style="color:#16a34a">${totClientiAttivi}</div><div class="stat-label">Attivi</div></div>
+          <div class="stat-card"><div class="stat-num">${settoriCoperti}</div><div class="stat-label">Settori coperti</div></div>
+          <div class="stat-card"><div class="stat-num">${totRichieste}</div><div class="stat-label">Richieste totali</div></div>
+          <div class="stat-card"><div class="stat-num">${totAppuntamenti}</div><div class="stat-label">Appuntamenti confermati</div></div>
+          <div class="stat-card"><div class="stat-num">${totFollowUpAttivi}</div><div class="stat-label">Con follow-up attivi</div></div>
+        </div>
 
-    <div class="sezione-titolo">🏪 Per cliente</div>
-    <div class="card">
-      ${righeClientiHtml ? `<table>
-        <tr><th>Cliente</th><th>Settore</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th><th>Follow-up</th></tr>
-        ${righeClientiHtml}
-      </table>` : '<div class="empty">Nessun cliente ancora.</div>'}
+        <div class="sezione-titolo">📊 Per settore</div>
+        <div class="card">
+          ${righeSettori ? `<table>
+            <tr><th>Settore</th><th>Clienti</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th></tr>
+            ${righeSettori}
+          </table>` : '<div class="empty">Nessun dato ancora.</div>'}
+        </div>
+
+        <div class="sezione-titolo">🏪 Per cliente</div>
+        <div class="card">
+          ${righeClientiHtml ? `<table>
+            <tr><th>Cliente</th><th>Settore</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th><th>Follow-up</th></tr>
+            ${righeClientiHtml}
+          </table>` : '<div class="empty">Nessun cliente ancora.</div>'}
+        </div>
+      </div>
+
+      <div class="tab-pannello" data-pannello="settori">
+        <div class="main-titolo">📁 Tipi di attività</div>
+        <p class="main-sub">Tutti i ${Object.keys(SETTORI).length} settori supportati. Apri un tipo di attività per vedere i clienti che lo usano ed entrare nei loro servizi, personale e orari.</p>
+        <div class="card">
+          ${direttorioSettoriHtml}${direttorioNonImpostatoHtml}
+        </div>
+      </div>
+
+      <footer>Aggiornamento automatico ogni 60 secondi</footer>
     </div>
-    <footer>Aggiornamento automatico ogni 60 secondi</footer>
   </div>
 
   <script>
-    document.querySelectorAll('[data-toggle]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        btn.closest('.settore-riga').classList.toggle('aperta');
+    (function () {
+      var tabLinks = document.querySelectorAll('.tab-link');
+      var pannelli = document.querySelectorAll('.tab-pannello');
+      function attivaTab(tab) {
+        pannelli.forEach(function (p) { p.classList.toggle('attivo', p.getAttribute('data-pannello') === tab); });
+        document.querySelectorAll('.sidebar-link.tab-link').forEach(function (l) { l.classList.toggle('attivo', l.getAttribute('data-tab') === tab); });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      tabLinks.forEach(function (l) {
+        l.addEventListener('click', function (e) {
+          e.preventDefault();
+          attivaTab(l.getAttribute('data-tab'));
+        });
       });
-    });
+      var iniziale = window.location.hash.replace('#', '');
+      if (iniziale && document.querySelector('.tab-pannello[data-pannello="' + iniziale + '"]')) {
+        attivaTab(iniziale);
+      }
+
+      document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          btn.closest('.settore-riga').classList.toggle('aperta');
+        });
+      });
+    })();
   </script>
 </body>
 </html>`;
