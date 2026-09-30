@@ -23,7 +23,8 @@
 // servizi/personale/orari".
 
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
-import { etichetteSettore, nomeSettore } from '../lib/settori.js';
+import { nomeSettore, inizialiSettore, coloreSettore } from '../lib/settori.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(str) {
   return String(str || '')
@@ -179,7 +180,6 @@ export default async function handler(req, res) {
     const personale = Array.isArray(personaleData) ? personaleData : [];
 
     const settore = config?.settore || null;
-    const et = etichetteSettore(settore);
     const orariAttuali = config?.orari_apertura && typeof config.orari_apertura === 'object' ? config.orari_apertura : {};
 
     const serviziRigheHtml = servizi.length > 0
@@ -230,15 +230,18 @@ export default async function handler(req, res) {
 <title>AI Setup Agency — Admin · ${escapeHtml(nomeAttivita)}</title>
 <style>
   :root { color-scheme: light; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f5f9; margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
   .container { max-width: 720px; margin: 0 auto; }
   a.torna { color: #4f46e5; text-decoration: none; font-size: 14px; }
   .admin-pill { display: inline-flex; align-items: center; gap: 6px; background: #0f172a; color: white; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 3px 10px; border-radius: 999px; margin: 10px 0 6px; }
   h1 { font-size: 1.4rem; margin: 2px 0 2px; }
-  .settore-pill { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #4338ca; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
+  .settore-pill { display: inline-flex; align-items: center; gap: 7px; background: #eef2ff; color: #4338ca; font-size: 0.78rem; font-weight: 600; padding: 4px 10px 4px 4px; border-radius: 999px; margin-bottom: 10px; }
+  .badge-settore-mini { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; color: white; font-size: 9px; font-weight: 700; }
   p.sub { color: #666; margin-top: 0; margin-bottom: 20px; font-size: 0.9rem; }
   .card { background: white; border-radius: 14px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); margin-bottom: 20px; transition: box-shadow .15s ease; }
-  .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  .card h2 { font-size: 1.05rem; margin: 0 0 4px; display: flex; align-items: center; gap: 7px; color: #1e293b; }
+  .card h2 .icona-ui { color: #6366f1; }
+  .icona-ui { flex-shrink: 0; vertical-align: -3px; }
   .card p.desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 16px; }
   .campo { display: block; margin-bottom: 18px; }
   .campo span { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
@@ -264,13 +267,13 @@ export default async function handler(req, res) {
 <body>
   <div class="container">
     <a class="torna" href="/api/agenzia">&larr; Torna alla dashboard agenzia</a>
-    <div><span class="admin-pill">👁 Vista admin</span></div>
-    <div class="settore-pill">${et.icona} ${escapeHtml(nomeSettore(settore))}</div>
+    <div><span class="admin-pill">${icon('eye', { size: 12 })} Vista admin</span></div>
+    <div class="settore-pill"><span class="badge-settore-mini" style="background:${coloreSettore(settore)}">${escapeHtml(settore ? inizialiSettore(settore) : '—')}</span> ${escapeHtml(nomeSettore(settore))}</div>
     <h1>${escapeHtml(nomeAttivita)}</h1>
     <p class="sub">Stai modificando i dati di questo cliente come amministratore dell'agenzia. Indirizzo, prezzi generali e follow-up restano gestiti dal cliente stesso nel suo account.</p>
 
     <div class="card" id="servizi">
-      <h2>🧾 Servizi offerti</h2>
+      <h2>${icon('list')} Servizi offerti</h2>
       <p class="desc">Il listino strutturato usato anche dal bot WhatsApp di questo cliente.</p>
       <table class="mini">
         <tr><th>Servizio</th><th>Prezzo</th><th>Durata</th><th></th></tr>
@@ -287,7 +290,7 @@ export default async function handler(req, res) {
     </div>
 
     <div class="card" id="personale">
-      <h2>👥 Personale</h2>
+      <h2>${icon('users')} Personale</h2>
       <p class="desc">Elenco dello staff di questo cliente.</p>
       <table class="mini">
         <tr><th>Nome</th><th>Ruolo</th><th>Telefono</th><th></th></tr>
@@ -307,7 +310,7 @@ export default async function handler(req, res) {
       <form method="POST" action="/api/agenzia-cliente#orari">
         <input type="hidden" name="cliente_id" value="${escapeHtml(cliente_id)}" />
         <input type="hidden" name="azione" value="salva_orari" />
-        <h2>🕒 Orari di apertura</h2>
+        <h2>${icon('clock')} Orari di apertura</h2>
         <p class="desc">Lascia vuoto un giorno se è chiuso. Usati dal bot per rispondere a "quando siete aperti?".</p>
         <div class="griglia-orari">${orariHtml}</div>
         <button type="submit" style="margin-top:14px;">Salva orari</button>

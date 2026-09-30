@@ -13,10 +13,19 @@
 // non prima.
 
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
-import { etichetteSettore, nomeSettore, SETTORI } from '../lib/settori.js';
+import { etichetteSettore, nomeSettore, inizialiSettore, coloreSettore, SETTORI } from '../lib/settori.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(text) {
   return String(text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Badge colorato con le iniziali del settore, al posto delle emoji —
+// deterministico (lib/settori.js: coloreSettore), non scelto a mano.
+function badgeSettore(settore, size = 22) {
+  const colore = coloreSettore(settore);
+  const iniziali = settore ? inizialiSettore(settore) : '—';
+  return `<span class="badge-settore" style="width:${size}px;height:${size}px;background:${colore};font-size:${Math.round(size * 0.4)}px;">${escapeHtml(iniziali)}</span>`;
 }
 
 function paginaNonAutenticato() {
@@ -106,10 +115,10 @@ export default async function handler(req, res) {
     const righeSettori = Object.entries(perSettore)
       .sort((a, b) => b[1].totale - a[1].totale)
       .map(([settore, g]) => {
-        const et = etichetteSettore(settore === '(non impostato)' ? null : settore);
+        const chiaveSettore = settore === '(non impostato)' ? null : settore;
         const conversione = g.lead > 0 ? Math.round((g.appuntamenti / g.lead) * 100) : 0;
         return `<tr>
-          <td>${et.icona} ${escapeHtml(settore === '(non impostato)' ? settore : nomeSettore(settore))}</td>
+          <td class="cella-settore">${badgeSettore(chiaveSettore, 20)} ${escapeHtml(settore === '(non impostato)' ? settore : nomeSettore(settore))}</td>
           <td>${g.clienti}</td>
           <td>${g.totale}</td>
           <td>${g.lead}</td>
@@ -144,10 +153,10 @@ export default async function handler(req, res) {
           : `<div class="empty-settore">Nessun cliente ancora in questo settore.</div>`;
         return `<div class="settore-riga">
           <button type="button" class="settore-sommario" data-toggle="settore-${i}">
-            <span class="settore-icona">${et.icona}</span>
+            ${badgeSettore(chiave)}
             <span class="settore-nome">${escapeHtml(nomeSettore(chiave))}</span>
             <span class="settore-conteggio">${clientiSettore.length}</span>
-            <span class="settore-freccia">▾</span>
+            <span class="settore-freccia">${icon('chevronDown', { size: 15 })}</span>
           </button>
           <div class="settore-clienti" id="settore-${i}">${clientiHtml}</div>
         </div>`;
@@ -156,10 +165,10 @@ export default async function handler(req, res) {
     const direttorioNonImpostatoHtml = nonImpostatoClienti.length > 0
       ? `<div class="settore-riga">
           <button type="button" class="settore-sommario" data-toggle="settore-non-impostato">
-            <span class="settore-icona">🏢</span>
+            ${badgeSettore(null)}
             <span class="settore-nome">Settore non impostato</span>
             <span class="settore-conteggio">${nonImpostatoClienti.length}</span>
-            <span class="settore-freccia">▾</span>
+            <span class="settore-freccia">${icon('chevronDown', { size: 15 })}</span>
           </button>
           <div class="settore-clienti" id="settore-non-impostato"><ul class="lista-clienti-settore">${nonImpostatoClienti.map((c) => `
             <li><a href="/api/agenzia-cliente?cliente_id=${encodeURIComponent(c.id)}">${escapeHtml(c.nome)}</a></li>`).join('')}</ul></div>
@@ -177,15 +186,14 @@ export default async function handler(req, res) {
     const righeClientiHtml = righeClienti
       .sort((a, b) => b.totale - a.totale)
       .map((r) => {
-        const et = etichetteSettore(r.settore);
         return `<tr>
           <td>${!r.attivo ? '<span class="badge-off">Non attivo</span> ' : ''}${escapeHtml(r.nome)}</td>
-          <td>${et.icona} ${escapeHtml(r.settore ? nomeSettore(r.settore) : '—')}</td>
+          <td class="cella-settore">${badgeSettore(r.settore, 20)} ${escapeHtml(r.settore ? nomeSettore(r.settore) : '—')}</td>
           <td>${r.totale}</td>
           <td>${r.lead}</td>
           <td>${r.appuntamenti}</td>
           <td>${r.lead > 0 ? `${r.conversione}%` : '—'}</td>
-          <td>${r.followUpAttivo ? '✅' : '—'}</td>
+          <td>${r.followUpAttivo ? icon('check', { size: 15 }) : '—'}</td>
         </tr>`;
       }).join('');
 
@@ -198,13 +206,14 @@ export default async function handler(req, res) {
   <title>Dashboard agenzia</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f4f5f9; color: #0f172a; -webkit-font-smoothing: antialiased; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); color: #0f172a; -webkit-font-smoothing: antialiased; }
     .app-shell { display: flex; min-height: 100vh; }
     .sidebar { width: 240px; flex-shrink: 0; background: #0f172a; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
-    .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
-    .sidebar-brand .icona { font-size: 22px; }
-    .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; }
-    .sidebar-brand .settore { font-size: 11px; color: #9ca3af; }
+    .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
+    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
+    .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; letter-spacing: -.01em; }
+    .sidebar-brand .settore { font-size: 11px; color: #9ca3af; margin-top: 1px; }
+    .icona-ui { flex-shrink: 0; vertical-align: -3px; }
     .sidebar-group { margin-bottom: 14px; }
     .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
     .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
@@ -213,7 +222,7 @@ export default async function handler(req, res) {
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
-    .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; }
+    .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; display: flex; align-items: center; gap: 9px; }
     .main-sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
     .tab-pannello { display: none; }
     .tab-pannello.attivo { display: block; }
@@ -223,7 +232,9 @@ export default async function handler(req, res) {
     .stat-card:hover { box-shadow: 0 2px 4px rgba(15,23,42,.05), 0 8px 18px rgba(15,23,42,.08); transform: translateY(-1px); }
     .stat-num { font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
     .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
-    .sezione-titolo { font-size: 15px; font-weight: 600; margin: 28px 0 12px; color: #374151; }
+    .sezione-titolo { font-size: 15px; font-weight: 600; margin: 28px 0 12px; color: #374151; display: flex; align-items: center; gap: 7px; }
+    .sezione-titolo .icona-ui { color: #6366f1; }
+    .cella-settore { display: flex; align-items: center; gap: 8px; }
     .card { background: white; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #0f172a; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -238,7 +249,7 @@ export default async function handler(req, res) {
     .settore-riga:last-child { border-bottom: none; }
     .settore-sommario { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; background: none; border: none; cursor: pointer; font: inherit; text-align: left; }
     .settore-sommario:hover { background: #fafafa; }
-    .settore-icona { font-size: 17px; }
+    .badge-settore { display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; color: white; font-weight: 700; letter-spacing: .01em; flex-shrink: 0; }
     .settore-nome { flex: 1; font-size: 14px; font-weight: 600; color: #1f2937; }
     .settore-conteggio { background: #f3f4f6; color: #374151; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
     .settore-freccia { color: #9ca3af; transition: transform .15s; }
@@ -263,7 +274,7 @@ export default async function handler(req, res) {
   <div class="app-shell">
     <div class="sidebar">
       <div class="sidebar-brand">
-        <span class="icona">🏢</span>
+        <span class="marchio">${icon('sparkle', { size: 16 })}</span>
         <div>
           <h1>AI Setup Agency</h1>
           <div class="settore">Area amministrativa</div>
@@ -271,18 +282,18 @@ export default async function handler(req, res) {
       </div>
 
       <div class="sidebar-group">
-        <a href="#panoramica" class="sidebar-link tab-link attivo" data-tab="panoramica">🏠 Panoramica</a>
+        <a href="#panoramica" class="sidebar-link tab-link attivo" data-tab="panoramica">${icon('home')} Panoramica</a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Struttura</div>
-        <a href="#settori" class="sidebar-link tab-link" data-tab="settori">📁 Tipi di attività <span class="conteggio">${Object.keys(SETTORI).length}</span></a>
+        <a href="#settori" class="sidebar-link tab-link" data-tab="settori">${icon('folder')} Tipi di attività <span class="conteggio">${Object.keys(SETTORI).length}</span></a>
       </div>
     </div>
 
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
-        <div class="main-titolo">🏢 Dashboard agenzia</div>
+        <div class="main-titolo">${icon('building', { size: 20 })} Dashboard agenzia</div>
         <p class="main-sub">Vista aggregata su tutti i clienti — non visibile ai singoli clienti.</p>
 
         <div class="stats">
@@ -294,7 +305,7 @@ export default async function handler(req, res) {
           <div class="stat-card"><div class="stat-num">${totFollowUpAttivi}</div><div class="stat-label">Con follow-up attivi</div></div>
         </div>
 
-        <div class="sezione-titolo">📊 Per settore</div>
+        <div class="sezione-titolo">${icon('chart', { size: 16 })} Per settore</div>
         <div class="card">
           ${righeSettori ? `<table>
             <tr><th>Settore</th><th>Clienti</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th></tr>
@@ -302,7 +313,7 @@ export default async function handler(req, res) {
           </table>` : '<div class="empty">Nessun dato ancora.</div>'}
         </div>
 
-        <div class="sezione-titolo">🏪 Per cliente</div>
+        <div class="sezione-titolo">${icon('building', { size: 16 })} Per cliente</div>
         <div class="card">
           ${righeClientiHtml ? `<table>
             <tr><th>Cliente</th><th>Settore</th><th>Richieste</th><th>Lead</th><th>Appuntamenti</th><th>Conversione</th><th>Follow-up</th></tr>
@@ -312,7 +323,7 @@ export default async function handler(req, res) {
       </div>
 
       <div class="tab-pannello" data-pannello="settori">
-        <div class="main-titolo">📁 Tipi di attività</div>
+        <div class="main-titolo">${icon('folder', { size: 20 })} Tipi di attività</div>
         <p class="main-sub">Tutti i ${Object.keys(SETTORI).length} settori supportati. Apri un tipo di attività per vedere i clienti che lo usano ed entrare nei loro servizi, personale e orari.</p>
         <div class="card">
           ${direttorioSettoriHtml}${direttorioNonImpostatoHtml}

@@ -14,6 +14,7 @@
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { spezzaInChunk } from '../lib/chunking.js';
 import { embedDocumenti } from '../lib/embeddings.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(text) {
   return String(text || '')
@@ -163,11 +164,12 @@ export default async function handler(req, res) {
       max-width: 800px;
       margin: 0 auto;
       padding: 32px 20px;
-      background: #f4f5f9;
+      background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%);
       color: #0f172a;
       -webkit-font-smoothing: antialiased;
     }
-    h1 { font-size: 22px; margin-bottom: 4px; letter-spacing: -.015em; }
+    h1 { font-size: 22px; margin-bottom: 4px; letter-spacing: -.015em; display: flex; align-items: center; gap: 8px; }
+    h1 .icona-ui { color: #6366f1; flex-shrink: 0; }
     .sottotitolo { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
     .card {
       background: white;
@@ -206,7 +208,7 @@ export default async function handler(req, res) {
 </head>
 <body>
   <a class="torna" href="/api/dashboard">&larr; Torna alla dashboard</a>
-  <h1>📚 Knowledge Base</h1>
+  <h1>${icon('book', { size: 21 })} Knowledge Base</h1>
   <div class="sottotitolo">Il testo caricato qui viene usato dall'assistente WhatsApp per rispondere con precisione (listino, FAQ, regolamento, procedure...).</div>
 
   <div class="card">

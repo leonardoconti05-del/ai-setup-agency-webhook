@@ -22,7 +22,8 @@
 // principale (info generali, follow-up, valore medio, orari).
 
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
-import { etichetteSettore, nomeSettore } from '../lib/settori.js';
+import { etichetteSettore, nomeSettore, inizialiSettore, coloreSettore } from '../lib/settori.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(str) {
   return String(str || '')
@@ -316,14 +317,17 @@ export default async function handler(req, res) {
 <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
 <style>
   :root { color-scheme: light; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f5f9; margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
   .container { max-width: 720px; margin: 0 auto; }
   a.torna { color: #4f46e5; text-decoration: none; font-size: 14px; }
-  h1 { font-size: 1.4rem; margin: 8px 0 2px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 2px; letter-spacing: -.01em; }
   .settore-pill { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #4338ca; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
+  .badge-settore-mini { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; color: white; font-size: 9px; font-weight: 700; flex-shrink: 0; }
   p.sub { color: #666; margin-top: 0; margin-bottom: 20px; font-size: 0.9rem; }
   .card { background: white; border-radius: 14px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); margin-bottom: 20px; transition: box-shadow .15s ease; }
-  .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  .card h2 { font-size: 1.05rem; margin: 0 0 4px; display: flex; align-items: center; gap: 7px; }
+  .card h2 .icona-ui { color: #6366f1; flex-shrink: 0; }
+  .icona-ui { vertical-align: -3px; }
   .card p.desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 16px; }
   .campo { display: block; margin-bottom: 18px; }
   .campo span { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
@@ -352,13 +356,13 @@ export default async function handler(req, res) {
 <body>
   <div class="container">
     <a class="torna" href="/api/dashboard">&larr; Torna alla dashboard</a>
-    <div class="settore-pill">${et.icona} ${escapeHtml(nomeSettore(config.settore))}</div>
+    <div class="settore-pill"><span class="badge-settore-mini" style="background:${coloreSettore(config.settore)}">${escapeHtml(config.settore ? inizialiSettore(config.settore) : '—')}</span> ${escapeHtml(nomeSettore(config.settore))}</div>
     <h1>${escapeHtml(nomeAttivita)}</h1>
     <p class="sub">Queste informazioni vengono usate dal bot WhatsApp per rispondere automaticamente a domande dei clienti (prezzi, orari, servizi, ecc.) e alimentano la dashboard.</p>
     ${salvatoOraOra ? '<div class="banner-ok">Informazioni salvate correttamente.</div>' : ''}
 
     <div class="card" id="servizi">
-      <h2>🧾 Servizi offerti</h2>
+      <h2>${icon('list')} Servizi offerti</h2>
       <p class="desc">Il listino strutturato che compare nella dashboard e che il bot può citare con prezzi precisi.</p>
       <table class="mini">
         <tr><th>Servizio</th><th>Prezzo</th><th>Durata</th><th></th></tr>
@@ -374,7 +378,7 @@ export default async function handler(req, res) {
     </div>
 
     <div class="card" id="personale">
-      <h2>👥 Personale</h2>
+      <h2>${icon('users')} Personale</h2>
       <p class="desc">Un elenco semplice del tuo staff — non gestisce turni o permessi, solo un promemoria visibile in dashboard.</p>
       <table class="mini">
         <tr><th>Nome</th><th>Ruolo</th><th>Telefono</th><th></th></tr>
@@ -392,17 +396,17 @@ export default async function handler(req, res) {
     <div class="card">
       <form method="POST" action="/api/info-cliente">
         <input type="hidden" name="azione" value="salva_info" />
-        <h2>🕒 Orari di apertura</h2>
+        <h2>${icon('clock')} Orari di apertura</h2>
         <p class="desc">Lascia vuoto un giorno se sei chiuso. Usati dal bot per rispondere a "quando siete aperti?".</p>
         <div class="griglia-orari">${orariHtml}</div>
 
         <hr class="sep" />
-        <h2>ℹ️ Informazioni generali</h2>
+        <h2>${icon('info')} Informazioni generali</h2>
         <p class="desc">Indirizzo, contatti e note che il bot può citare quando serve.</p>
         ${campiHtml}
 
         <hr class="sep" />
-        <h2>🔁 Follow-up automatici</h2>
+        <h2>${icon('repeat')} Follow-up automatici</h2>
         <p class="desc">Se un cliente scrive ma non completa la richiesta, il sistema può scrivergli di nuovo automaticamente dopo un po' di silenzio. Si ferma da solo appena il cliente risponde.</p>
 
         <label class="campo" style="display:flex;align-items:center;gap:8px;">
@@ -437,7 +441,7 @@ export default async function handler(req, res) {
         </label>
 
         <hr class="sep" />
-        <h2>💶 Statistiche</h2>
+        <h2>${icon('wallet')} Statistiche</h2>
         <label class="campo">
           <span>Valore medio di un ${et.evento.toLowerCase()} (€, facoltativo)</span>
           <input type="number" min="0" step="0.01" name="valore_medio_cliente" value="${escapeHtml(String(valoreMedioAttuale))}" placeholder="Es. 80" />

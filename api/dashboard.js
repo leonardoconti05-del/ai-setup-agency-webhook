@@ -24,6 +24,7 @@
 
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(text) {
   return String(text || '')
@@ -197,9 +198,9 @@ export default async function handler(req, res) {
     }
 
     const statoBadge = {
-      urgente: { colore: '#dc2626', bg: '#fef2f2', label: '🚨 Urgente' },
-      completata: { colore: '#16a34a', bg: '#f0fdf4', label: '✅ Completata' },
-      in_corso: { colore: '#d97706', bg: '#fffbeb', label: '⏳ In corso' },
+      urgente: { colore: '#dc2626', bg: '#fef2f2', label: 'Urgente', icona: 'alert' },
+      completata: { colore: '#16a34a', bg: '#f0fdf4', label: 'Completata', icona: 'check' },
+      in_corso: { colore: '#d97706', bg: '#fffbeb', label: 'In corso', icona: 'clock' },
     };
 
     const formAzione = (num, stato, label) => `
@@ -221,17 +222,17 @@ export default async function handler(req, res) {
         const data = r.updated_at ? new Date(r.updated_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
         const thread = Array.isArray(r.conversazione) ? r.conversazione : [];
         const threadHtml = thread.length > 0
-          ? thread.map((m) => `<div class="msg-bolla msg-${m.role === 'assistant' ? 'ai' : 'utente'}"><span class="msg-etichetta">${m.role === 'assistant' ? '🤖 Assistente AI' : '💬 Cliente'}</span>${escapeHtml(m.content)}</div>`).join('')
+          ? thread.map((m) => `<div class="msg-bolla msg-${m.role === 'assistant' ? 'ai' : 'utente'}"><span class="msg-etichetta">${m.role === 'assistant' ? 'Assistente AI' : 'Cliente'}</span>${escapeHtml(m.content)}</div>`).join('')
           : '<div class="sezione-vuota">Nessuno storico messaggi salvato per questa conversazione.</div>';
 
         return `<div class="conv-riga" data-stato="${escapeHtml(r.stato || 'in_corso')}">
           <div class="conv-sommario" data-toggle="conv-${i}">
-            <span class="badge" style="background:${badge.bg};color:${badge.colore}">${badge.label}</span>
+            <span class="badge" style="background:${badge.bg};color:${badge.colore}">${icon(badge.icona, { size: 12 })}${badge.label}</span>
             <span class="conv-campi">${campiDati || '<i style="color:#9ca3af">nessun dato raccolto</i>'}</span>
             <a href="tel:${escapeHtml(r.numero_utente)}" class="telefono" onclick="event.stopPropagation();">${escapeHtml(r.numero_utente)}</a>
             <span class="data-col">${data}</span>
             <span class="conv-azioni">${formAzione(r.numero_utente, 'in_corso', 'In corso')}${formAzione(r.numero_utente, 'completata', 'Completata')}</span>
-            <span class="conv-freccia">▾</span>
+            <span class="conv-freccia">${icon('chevronDown', { size: 15 })}</span>
           </div>
           <div class="conv-thread" id="conv-${i}">${threadHtml}</div>
         </div>`;
@@ -275,7 +276,7 @@ export default async function handler(req, res) {
       { nome: 'Google Calendar', attivo: !!configCliente?.google_calendar_id },
       { nome: 'Telegram', attivo: !!configCliente?.telegram_chat_id },
       { nome: 'Assistente AI', attivo: true },
-    ].map((s) => `<div class="stato-riga"><span>${s.nome}</span><span class="${s.attivo ? 'stato-on' : 'stato-off'}">${s.attivo ? '● Attivo' : '○ Non collegato'}</span></div>`).join('');
+    ].map((s) => `<div class="stato-riga"><span>${s.nome}</span><span class="${s.attivo ? 'stato-on' : 'stato-off'}"><span class="pallino"></span>${s.attivo ? 'Attivo' : 'Non collegato'}</span></div>`).join('');
 
     const html = `<!DOCTYPE html>
 <html lang="it">
@@ -286,13 +287,14 @@ export default async function handler(req, res) {
   <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f4f5f9; color: #0f172a; -webkit-font-smoothing: antialiased; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); color: #0f172a; -webkit-font-smoothing: antialiased; }
     .app-shell { display: flex; min-height: 100vh; }
     .sidebar { width: 240px; flex-shrink: 0; background: #0f172a; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
-    .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
-    .sidebar-brand .icona { font-size: 22px; }
-    .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; }
-    .sidebar-brand .settore { font-size: 11px; color: #9ca3af; }
+    .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
+    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
+    .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; letter-spacing: -.01em; }
+    .sidebar-brand .settore { font-size: 11px; color: #9ca3af; margin-top: 1px; }
+    .icona-ui { flex-shrink: 0; vertical-align: -3px; }
     .sidebar-group { margin-bottom: 14px; }
     .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
     .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
@@ -301,7 +303,7 @@ export default async function handler(req, res) {
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
-    .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; }
+    .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; display: flex; align-items: center; gap: 9px; }
     .main-sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
     .tab-pannello { display: none; }
     .tab-pannello.attivo { display: block; }
@@ -313,7 +315,8 @@ export default async function handler(req, res) {
     .griglia-2col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px; }
     .griglia-sezioni { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
     .card { background: white; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); overflow: hidden; padding: 20px 22px; }
-    .card h2 { font-size: 14.5px; margin: 0 0 4px; letter-spacing: -.01em; }
+    .card h2 { font-size: 14.5px; margin: 0 0 4px; letter-spacing: -.01em; display: flex; align-items: center; gap: 7px; color: #1e293b; }
+    .card h2 .icona-ui { color: #6366f1; }
     .card p.desc { color: #9ca3af; font-size: 12px; margin: 0 0 14px; }
     .alert-attenzione { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .alert-attenzione.ok { background: #f0fdf4; border-color: #bbf7d0; }
@@ -326,8 +329,10 @@ export default async function handler(req, res) {
     .lista-appuntamenti li { padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 13.5px; }
     .lista-appuntamenti li:last-child { border-bottom: none; }
     .stato-riga { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; }
+    .stato-on, .stato-off { display: inline-flex; align-items: center; gap: 6px; }
     .stato-on { color: #16a34a; font-weight: 600; }
     .stato-off { color: #9ca3af; }
+    .pallino { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
     table { width: 100%; border-collapse: collapse; }
     table.tabella-compatta th { background: none; color: #6b7280; padding: 6px 4px; font-size: 11px; text-align: left; }
     table.tabella-compatta td { padding: 8px 4px; font-size: 13px; border-bottom: 1px solid #f6f7f8; }
@@ -342,7 +347,7 @@ export default async function handler(req, res) {
     .giorno-nome { font-weight: 600; color: #374151; width: 44px; }
     .giorno-valore { color: #374151; text-align: right; }
     .giorno-orario.chiuso .giorno-valore { color: #9ca3af; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
     .telefono { color: #4f46e5; text-decoration: none; }
     .telefono:hover { text-decoration: underline; }
     .data-col { color: #6b7280; font-size: 12.5px; white-space: nowrap; }
@@ -383,36 +388,36 @@ export default async function handler(req, res) {
   <div class="app-shell">
     <div class="sidebar">
       <div class="sidebar-brand">
-        <span class="icona">🤖</span>
+        <span class="marchio">${icon('sparkle', { size: 16 })}</span>
         <div>
           <h1>AI Setup Agency</h1>
-          <div class="settore">${et.icona} ${escapeHtml(nomeAttivita)} · ${escapeHtml(nomeSettore(settore))}</div>
+          <div class="settore">${escapeHtml(nomeAttivita)} · ${escapeHtml(nomeSettore(settore))}</div>
         </div>
       </div>
 
       <div class="sidebar-group">
-        <a href="#panoramica" class="sidebar-link tab-link attivo" data-tab="panoramica">🏠 Panoramica</a>
+        <a href="#panoramica" class="sidebar-link tab-link attivo" data-tab="panoramica">${icon('home')} Panoramica</a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Operatività</div>
-        <a href="#conversazioni" class="sidebar-link tab-link" data-tab="conversazioni">💬 Conversazioni <span class="conteggio">${contaTotali}</span></a>
+        <a href="#conversazioni" class="sidebar-link tab-link" data-tab="conversazioni">${icon('chat')} Conversazioni <span class="conteggio">${contaTotali}</span></a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Attività</div>
-        <a href="#attivita" class="sidebar-link tab-link" data-tab="attivita">🧾 Servizi, personale e orari</a>
+        <a href="#attivita" class="sidebar-link tab-link" data-tab="attivita">${icon('folder')} Servizi, personale e orari</a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Automazione AI</div>
-        <a href="/api/knowledge" class="sidebar-link">📚 Knowledge Base</a>
-        <a href="/api/info-cliente#follow-up" class="sidebar-link">🔁 Follow-up</a>
+        <a href="/api/knowledge" class="sidebar-link">${icon('book')} Knowledge Base</a>
+        <a href="/api/info-cliente#follow-up" class="sidebar-link">${icon('repeat')} Follow-up</a>
       </div>
 
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Impostazioni</div>
-        <a href="/api/info-cliente" class="sidebar-link">⚙️ Attività &amp; account</a>
+        <a href="/api/info-cliente" class="sidebar-link">${icon('sliders')} Attività &amp; account</a>
       </div>
     </div>
 
@@ -422,8 +427,8 @@ export default async function handler(req, res) {
         <p class="main-sub">Ecco la tua attività, in sintesi.</p>
 
         ${contaAttenzione > 0
-          ? `<div class="alert-attenzione"><span>⚠️ <strong>${contaAttenzione}</strong> conversazione${contaAttenzione === 1 ? '' : 'i'} richiedono attenzione (urgenti o in corso).</span><a href="#conversazioni" class="tab-link" data-tab="conversazioni">Vai alle conversazioni &rarr;</a></div>`
-          : `<div class="alert-attenzione ok"><span>✅ Nessuna conversazione in sospeso al momento.</span></div>`}
+          ? `<div class="alert-attenzione">${icon('alert', { size: 17 })}<span><strong>${contaAttenzione}</strong> conversazione${contaAttenzione === 1 ? '' : 'i'} richiedono attenzione (urgenti o in corso).</span><a href="#conversazioni" class="tab-link" data-tab="conversazioni">Vai alle conversazioni &rarr;</a></div>`
+          : `<div class="alert-attenzione ok">${icon('check', { size: 17 })}<span>Nessuna conversazione in sospeso al momento.</span></div>`}
 
         <div class="stats">
           <div class="stat-card"><div class="stat-num">${contaAppuntamenti}</div><div class="stat-label">${escapeHtml(et.eventoPlurale)} confermati</div></div>
@@ -434,19 +439,19 @@ export default async function handler(req, res) {
 
         <div class="griglia-2col">
           <div class="card">
-            <h2>📅 Prossimi ${et.eventoPlurale.toLowerCase()}</h2>
+            <h2>${icon('calendar')} Prossimi ${et.eventoPlurale.toLowerCase()}</h2>
             <p class="desc">Solo appuntamenti confermati dopo l'attivazione di questo tracciamento.</p>
             ${prossimiAppuntamentiHtml}
           </div>
           <div class="card">
-            <h2>🔌 Stato sistema</h2>
+            <h2>${icon('activity')} Stato sistema</h2>
             <p class="desc">Integrazioni collegate a questa attività.</p>
             ${statoSistema}
           </div>
         </div>
 
         <div class="card" style="margin-bottom:20px;">
-          <h2>💶 Finanziario &amp; performance AI</h2>
+          <h2>${icon('wallet')} Finanziario &amp; performance AI</h2>
           <p class="desc">Dati reali dalle conversazioni WhatsApp — nessuna stima non richiesta.</p>
           <div class="analytics-grid">
             <div class="analytics-num-blocco"><div class="analytics-num">${messaggiTotali}</div><div class="analytics-label">Messaggi ricevuti</div></div>
@@ -463,7 +468,7 @@ export default async function handler(req, res) {
       </div>
 
       <div class="tab-pannello" data-pannello="conversazioni">
-        <div class="main-titolo">💬 Conversazioni</div>
+        <div class="main-titolo">${icon('chat', { size: 20 })} Conversazioni</div>
         <p class="main-sub">Ogni riga è una conversazione WhatsApp — clicca per leggere lo storico completo con l'AI.</p>
         <div class="card">
           <div class="conv-filtri">
@@ -477,21 +482,21 @@ export default async function handler(req, res) {
       </div>
 
       <div class="tab-pannello" data-pannello="attivita">
-        <div class="main-titolo">🧾 Servizi, personale e orari</div>
+        <div class="main-titolo">${icon('folder', { size: 20 })} Servizi, personale e orari</div>
         <p class="main-sub">Questi dati alimentano anche le risposte del bot ai clienti. <a href="/api/info-cliente" style="color:#4f46e5;text-decoration:none;">Modifica tutto &rarr;</a></p>
         <div class="griglia-sezioni">
           <div class="card">
-            <h2>🧾 Servizi offerti</h2>
+            <h2>${icon('list')} Servizi offerti</h2>
             <p class="desc">Il tuo listino.</p>
             ${serviziHtml}
           </div>
           <div class="card">
-            <h2>👥 Personale</h2>
+            <h2>${icon('users')} Personale</h2>
             <p class="desc">Il tuo staff.</p>
             ${personaleHtml}
           </div>
           <div class="card">
-            <h2>🕒 Orari di apertura</h2>
+            <h2>${icon('clock')} Orari di apertura</h2>
             <p class="desc">Usati anche dal bot WhatsApp.</p>
             <div class="griglia-orari-mini">${orariHtml}</div>
           </div>

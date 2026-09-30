@@ -13,6 +13,7 @@
 // configurata, l'accesso admin è semplicemente impossibile, non aperto.
 
 import { firmaSessione, impostaCookieSessione } from '../lib/session.js';
+import { icon } from '../lib/icons.js';
 
 function escapeHtml(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -24,7 +25,7 @@ function paginaLogin({ errore } = {}) {
   <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at top, #1e293b, #0f172a);margin:0;-webkit-font-smoothing:antialiased;">
     <div style="background:white;padding:36px 32px;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.35);max-width:340px;width:100%;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4f46e5;margin-bottom:6px;">AI Setup Agency</div>
-      <h2 style="margin:0 0 4px;color:#0f172a;">🏢 Area amministrativa</h2>
+      <h2 style="margin:0 0 4px;color:#0f172a;display:flex;align-items:center;gap:8px;"><span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;border-radius:8px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;">${icon('building', { size: 15 })}</span> Area amministrativa</h2>
       <p style="color:#6b7280;font-size:0.9rem;margin-bottom:18px;">Accesso riservato al titolare.</p>
       ${errore ? `<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:9px;margin-bottom:14px;font-size:0.85rem;">${escapeHtml(errore)}</div>` : ''}
       <form method="POST" action="/api/agenzia-login">
