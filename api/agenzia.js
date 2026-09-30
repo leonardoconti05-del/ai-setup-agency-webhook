@@ -20,10 +20,10 @@ function escapeHtml(text) {
 }
 
 function paginaNonAutenticato() {
-  return `<!DOCTYPE html><html lang="it"><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111827;margin:0;">
+  return `<!DOCTYPE html><html lang="it"><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;margin:0;">
     <div style="background:white;padding:32px;border-radius:12px;text-align:center;">
       <h2 style="margin-top:0;">Sessione admin scaduta</h2>
-      <a href="/api/agenzia-login" style="display:inline-block;background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Accedi di nuovo</a>
+      <a href="/api/agenzia-login" style="display:inline-block;background:#4f46e5;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Accedi di nuovo</a>
     </div>
   </body></html>`;
 }
@@ -198,9 +198,9 @@ export default async function handler(req, res) {
   <title>Dashboard agenzia</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f1f2f6; color: #111827; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #f4f5f9; color: #0f172a; -webkit-font-smoothing: antialiased; }
     .app-shell { display: flex; min-height: 100vh; }
-    .sidebar { width: 240px; flex-shrink: 0; background: #111827; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
+    .sidebar { width: 240px; flex-shrink: 0; background: #0f172a; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
     .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
     .sidebar-brand .icona { font-size: 22px; }
     .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; }
@@ -209,23 +209,24 @@ export default async function handler(req, res) {
     .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
     .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
     .sidebar-link:hover { background: rgba(255,255,255,.06); color: white; }
-    .sidebar-link.attivo { background: #2563eb; color: white; font-weight: 600; }
+    .sidebar-link.attivo { background: linear-gradient(135deg, #4f46e5, #4338ca); color: white; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,.35); }
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
-    .main-titolo { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+    .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; }
     .main-sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
     .tab-pannello { display: none; }
     .tab-pannello.attivo { display: block; }
     .wrap { max-width: 1200px; margin: 0; padding: 0; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-    .stat-card { background: white; border-radius: 10px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); text-align: center; flex: 1; min-width: 110px; }
-    .stat-num { font-size: 26px; font-weight: 700; }
+    .stat-card { background: white; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 3px 10px rgba(15,23,42,.05); text-align: center; flex: 1; min-width: 110px; transition: box-shadow .15s ease, transform .15s ease; }
+    .stat-card:hover { box-shadow: 0 2px 4px rgba(15,23,42,.05), 0 8px 18px rgba(15,23,42,.08); transform: translateY(-1px); }
+    .stat-num { font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
     .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
     .sezione-titolo { font-size: 15px; font-weight: 600; margin: 28px 0 12px; color: #374151; }
-    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow: hidden; }
+    .card { background: white; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
-    th { background: #111827; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    th { background: #0f172a; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
     td { padding: 12px 14px; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
     tr:last-child td { border-bottom: none; }
     tr:hover { background: #fafafa; }
@@ -247,7 +248,7 @@ export default async function handler(req, res) {
     .lista-clienti-settore { list-style: none; margin: 0; padding: 0; }
     .lista-clienti-settore li { padding: 7px 0; border-bottom: 1px solid #f6f7f8; font-size: 13.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .lista-clienti-settore li:last-child { border-bottom: none; }
-    .lista-clienti-settore a { color: #2563eb; text-decoration: none; font-weight: 600; }
+    .lista-clienti-settore a { color: #4f46e5; text-decoration: none; font-weight: 600; }
     .lista-clienti-settore a:hover { text-decoration: underline; }
     .mini-stat { color: #9ca3af; font-size: 12px; margin-left: auto; }
     .empty-settore { color: #9ca3af; font-size: 13px; padding: 6px 0; font-style: italic; }

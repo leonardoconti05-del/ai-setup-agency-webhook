@@ -316,21 +316,22 @@ export default async function handler(req, res) {
 <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title>
 <style>
   :root { color-scheme: light; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f6f8; margin: 0; padding: 24px; color: #1a1a1a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f5f9; margin: 0; padding: 24px; color: #0f172a; -webkit-font-smoothing: antialiased; }
   .container { max-width: 720px; margin: 0 auto; }
-  a.torna { color: #2563eb; text-decoration: none; font-size: 14px; }
+  a.torna { color: #4f46e5; text-decoration: none; font-size: 14px; }
   h1 { font-size: 1.4rem; margin: 8px 0 2px; }
   .settore-pill { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #4338ca; font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-bottom: 10px; }
   p.sub { color: #666; margin-top: 0; margin-bottom: 20px; font-size: 0.9rem; }
-  .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  .card { background: white; border-radius: 14px; padding: 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); margin-bottom: 20px; transition: box-shadow .15s ease; }
   .card h2 { font-size: 1.05rem; margin: 0 0 4px; }
   .card p.desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 16px; }
   .campo { display: block; margin-bottom: 18px; }
   .campo span { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
   input[type="text"], input[type="number"], textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d5d8dc; border-radius: 8px; font-size: 0.95rem; font-family: inherit; }
   textarea { resize: vertical; }
-  button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
-  button:hover { background: #1d4ed8; }
+  button { background: #4f46e5; color: white; border: none; padding: 12px 24px; border-radius: 9px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background .15s ease, transform .1s ease; }
+  button:active { transform: translateY(1px); }
+  button:hover { background: #4338ca; }
   .banner-ok { background: #dcfce7; color: #166534; padding: 10px 14px; border-radius: 8px; margin-bottom: 18px; font-size: 0.9rem; }
   .nota { font-size: 0.8rem; color: #888; margin-top: 20px; text-align: center; }
   table.mini { width: 100%; border-collapse: collapse; margin-bottom: 16px; }

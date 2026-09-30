@@ -30,11 +30,13 @@ function escapeHtml(str) {
 }
 
 function paginaErrore(messaggio) {
-  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-  <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f3f4f6;margin:0;">
-    <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;max-width:420px;">
-      <h2 style="margin-top:0;">Accesso non valido</h2>
-      <p style="color:#6b7280;">${escapeHtml(messaggio)}</p>
+  return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI Setup Agency — Accesso</title></head>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f5f9;margin:0;-webkit-font-smoothing:antialiased;">
+    <div style="background:white;padding:36px 32px;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 28px rgba(15,23,42,.08);text-align:center;max-width:420px;">
+      <div style="font-size:30px;margin-bottom:6px;">🤖</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4f46e5;margin-bottom:10px;">AI Setup Agency</div>
+      <h2 style="margin:0 0 8px;color:#0f172a;">Accesso non valido</h2>
+      <p style="color:#6b7280;margin-bottom:0;">${escapeHtml(messaggio)}</p>
     </div>
   </body></html>`;
 }

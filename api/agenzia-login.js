@@ -20,16 +20,17 @@ function escapeHtml(str) {
 
 function paginaLogin({ errore } = {}) {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Accesso agenzia</title></head>
-  <body style="font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111827;margin:0;">
-    <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:340px;width:100%;">
-      <h2 style="margin-top:0;">🏢 Dashboard agenzia</h2>
-      <p style="color:#6b7280;font-size:0.9rem;">Accesso riservato al titolare.</p>
-      ${errore ? `<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:0.85rem;">${escapeHtml(errore)}</div>` : ''}
+  <title>AI Setup Agency — Accesso agenzia</title></head>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at top, #1e293b, #0f172a);margin:0;-webkit-font-smoothing:antialiased;">
+    <div style="background:white;padding:36px 32px;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.35);max-width:340px;width:100%;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4f46e5;margin-bottom:6px;">AI Setup Agency</div>
+      <h2 style="margin:0 0 4px;color:#0f172a;">🏢 Area amministrativa</h2>
+      <p style="color:#6b7280;font-size:0.9rem;margin-bottom:18px;">Accesso riservato al titolare.</p>
+      ${errore ? `<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:9px;margin-bottom:14px;font-size:0.85rem;">${escapeHtml(errore)}</div>` : ''}
       <form method="POST" action="/api/agenzia-login">
         <input type="password" name="password" placeholder="Password" required autofocus
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d5d8dc;border-radius:8px;font-size:0.95rem;margin-bottom:14px;" />
-        <button type="submit" style="width:100%;background:#2563eb;color:white;border:none;padding:12px;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">Accedi</button>
+          style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid #d5d8dc;border-radius:9px;font-size:0.95rem;margin-bottom:14px;font-family:inherit;" />
+        <button type="submit" style="width:100%;background:#4f46e5;color:white;border:none;padding:12px;border-radius:9px;font-size:0.95rem;font-weight:600;cursor:pointer;transition:background .15s ease;">Accedi</button>
       </form>
     </div>
   </body></html>`;
