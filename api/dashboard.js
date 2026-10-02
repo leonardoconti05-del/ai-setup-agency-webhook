@@ -410,7 +410,7 @@ export default async function handler(req, res) {
       </div>
 
       <div class="sidebar-group">
-        <div class="sidebar-group-titolo">Automazione AI</div>
+        <div class="sidebar-group-titolo">Assistente AI</div>
         <a href="/api/knowledge" class="sidebar-link">${icon('book')} Knowledge Base</a>
         <a href="/api/info-cliente#follow-up" class="sidebar-link">${icon('repeat')} Follow-up</a>
       </div>
@@ -424,7 +424,7 @@ export default async function handler(req, res) {
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
         <div class="main-titolo">${saluto()}, ${escapeHtml(nomeAttivita)}</div>
-        <p class="main-sub">Ecco la tua attività, in sintesi.</p>
+        <p class="main-sub">La tua attività, sempre sotto controllo.</p>
 
         ${contaAttenzione > 0
           ? `<div class="alert-attenzione">${icon('alert', { size: 17 })}<span><strong>${contaAttenzione}</strong> conversazione${contaAttenzione === 1 ? '' : 'i'} richiedono attenzione (urgenti o in corso).</span><a href="#conversazioni" class="tab-link" data-tab="conversazioni">Vai alle conversazioni &rarr;</a></div>`

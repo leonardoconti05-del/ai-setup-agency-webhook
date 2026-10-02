@@ -329,6 +329,9 @@ export default async function handler(req, res) {
   .card h2 .icona-ui { color: #138577; flex-shrink: 0; }
   .icona-ui { vertical-align: -3px; }
   .card p.desc { color: #6b7280; font-size: 0.85rem; margin: 0 0 16px; }
+  .lista-capacita { margin: 0 0 16px; padding-left: 20px; color: #374151; font-size: 0.9rem; line-height: 1.7; }
+  .lista-capacita li { margin-bottom: 2px; }
+  .nota-affidabile { font-size: 0.82rem; color: #6b7280; margin: 0; padding-top: 14px; border-top: 1px solid #E3E1DB; line-height: 1.55; }
   .campo { display: block; margin-bottom: 18px; }
   .campo span { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
   input[type="text"], input[type="number"], textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #d5d8dc; border-radius: 8px; font-size: 0.95rem; font-family: inherit; }
@@ -360,6 +363,19 @@ export default async function handler(req, res) {
     <h1>${escapeHtml(nomeAttivita)}</h1>
     <p class="sub">Queste informazioni vengono usate dal bot WhatsApp per rispondere automaticamente a domande dei clienti (prezzi, orari, servizi, ecc.) e alimentano la dashboard.</p>
     ${salvatoOraOra ? '<div class="banner-ok">Informazioni salvate correttamente.</div>' : ''}
+
+    <div class="card">
+      <h2>${icon('sliders')} Il tuo assistente</h2>
+      <p class="desc">Cosa fa, in concreto, con i dati che configuri qui sotto.</p>
+      <ul class="lista-capacita">
+        <li>Risponde ai clienti su WhatsApp usando il tono e le informazioni della tua attività</li>
+        <li>Raccoglie i dati utili per gestire la richiesta (quelli configurati per il tuo settore)</li>
+        <li>Riconosce le richieste urgenti e avvisa subito lo staff, se hai impostato un criterio di urgenza</li>
+        <li>Propone orari liberi e fissa l'appuntamento, se hai collegato Google Calendar</li>
+        <li>Invia un follow-up se un cliente non risponde più, entro i limiti che imposti tu</li>
+      </ul>
+      <p class="nota-affidabile">Progettato per lavorare, non per stupire: automatizza quello che hai configurato, senza inventare risposte fuori da questi limiti, e coinvolge te o il tuo staff ogni volta che serve una decisione umana.</p>
+    </div>
 
     <div class="card" id="servizi">
       <h2>${icon('list')} Servizi offerti</h2>
