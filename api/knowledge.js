@@ -26,11 +26,11 @@ function escapeHtml(text) {
 
 function paginaNonAutenticato() {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-  <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f3f4f6;">
+  <body style="font-family:'Archivo',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FAFAF8;">
     <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
       <h2 style="margin-top:0;">Sessione scaduta o non autenticata</h2>
       <p style="color:#6b7280;">Accedi di nuovo con il tuo codice.</p>
-      <a href="/api/dashboard-login" style="display:inline-block;background:#4f46e5;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Vai al login</a>
+      <a href="/api/dashboard-login" style="display:inline-block;background:#0E6E62;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Vai al login</a>
     </div>
   </body></html>`;
 }
@@ -156,25 +156,26 @@ export default async function handler(req, res) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Setup Agency — Knowledge Base</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>AI Setup Agency — Knowledge Base</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       max-width: 800px;
       margin: 0 auto;
       padding: 32px 20px;
-      background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%);
-      color: #0f172a;
+      background: #FAFAF8;
+      color: #15181D;
       -webkit-font-smoothing: antialiased;
     }
     h1 { font-size: 22px; margin-bottom: 4px; letter-spacing: -.015em; display: flex; align-items: center; gap: 8px; }
-    h1 .icona-ui { color: #6366f1; flex-shrink: 0; }
+    h1 .icona-ui { color: #138577; flex-shrink: 0; }
     .sottotitolo { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
     .card {
       background: white;
-      border-radius: 14px;
-      box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06);
+      border: 1px solid #E3E1DB;
+      border-radius: 10px;
+      box-shadow: none;
       padding: 20px;
       margin-bottom: 20px;
     }
@@ -189,7 +190,7 @@ export default async function handler(req, res) {
     }
     textarea { min-height: 220px; resize: vertical; }
     button.btn-principale {
-      background: #4f46e5;
+      background: #0E6E62;
       color: white;
       border: none;
       padding: 10px 20px;
@@ -203,7 +204,7 @@ export default async function handler(req, res) {
     .data-col { color: #6b7280; font-size: 13px; white-space: nowrap; }
     .btn-elimina { font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 6px; border: 1px solid #fca5a5; color: #dc2626; background: #fef2f2; cursor: pointer; }
     .empty { color: #9ca3af; padding: 12px 0; }
-    a.torna { color: #4f46e5; text-decoration: none; font-size: 14px; }
+    a.torna { color: #0E6E62; text-decoration: none; font-size: 14px; }
   </style>
 </head>
 <body>

@@ -29,10 +29,10 @@ function badgeSettore(settore, size = 22) {
 }
 
 function paginaNonAutenticato() {
-  return `<!DOCTYPE html><html lang="it"><body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f172a;margin:0;">
+  return `<!DOCTYPE html><html lang="it"><body style="font-family:'Archivo',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#15181D;margin:0;">
     <div style="background:white;padding:32px;border-radius:12px;text-align:center;">
       <h2 style="margin-top:0;">Sessione admin scaduta</h2>
-      <a href="/api/agenzia-login" style="display:inline-block;background:#4f46e5;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Accedi di nuovo</a>
+      <a href="/api/agenzia-login" style="display:inline-block;background:#0E6E62;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Accedi di nuovo</a>
     </div>
   </body></html>`;
 }
@@ -203,22 +203,22 @@ export default async function handler(req, res) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="60">
-  <title>Dashboard agenzia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Dashboard agenzia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); color: #0f172a; -webkit-font-smoothing: antialiased; }
+    body { font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #FAFAF8; color: #15181D; -webkit-font-smoothing: antialiased; }
     .app-shell { display: flex; min-height: 100vh; }
-    .sidebar { width: 240px; flex-shrink: 0; background: #0f172a; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
+    .sidebar { width: 240px; flex-shrink: 0; background: #15181D; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
     .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
-    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
+    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: #0E6E62; color: white; }
     .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; letter-spacing: -.01em; }
     .sidebar-brand .settore { font-size: 11px; color: #9ca3af; margin-top: 1px; }
     .icona-ui { flex-shrink: 0; vertical-align: -3px; }
     .sidebar-group { margin-bottom: 14px; }
     .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
-    .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
-    .sidebar-link:hover { background: rgba(255,255,255,.06); color: white; }
-    .sidebar-link.attivo { background: linear-gradient(135deg, #4f46e5, #4338ca); color: white; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,.35); }
+    .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; border-left: 3px solid transparent; color: #a9adb4; font-size: 13.5px; text-decoration: none; cursor: pointer; border-top: none; border-right: none; border-bottom: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+    .sidebar-link:hover { background: rgba(255,255,255,.05); color: white; }
+    .sidebar-link.attivo { background: rgba(255,255,255,.06); border-left: 3px solid #138577; padding-left: 17px; color: white; font-weight: 600; }
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
@@ -233,15 +233,15 @@ export default async function handler(req, res) {
     .stat-num { font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
     .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
     .sezione-titolo { font-size: 15px; font-weight: 600; margin: 28px 0 12px; color: #374151; display: flex; align-items: center; gap: 7px; }
-    .sezione-titolo .icona-ui { color: #6366f1; }
+    .sezione-titolo .icona-ui { color: #138577; }
     .cella-settore { display: flex; align-items: center; gap: 8px; }
-    .card { background: white; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); overflow: hidden; }
+    .card { background: white; border: 1px solid #E3E1DB; border-radius: 10px; box-shadow: none; overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
-    th { background: #0f172a; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    th { background: #15181D; color: white; padding: 10px 14px; text-align: left; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
     td { padding: 12px 14px; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
     tr:last-child td { border-bottom: none; }
     tr:hover { background: #fafafa; }
-    .badge-off { display: inline-block; background: #f3f4f6; color: #6b7280; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+    .badge-off { display: inline-block; background: #F0EEE8; color: #6b7280; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
     .empty { text-align: center; padding: 50px 20px; color: #9ca3af; }
     footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 20px; }
     /* Direttorio settori (tutti i 29 tipi di attività, navigabile) */
@@ -251,7 +251,7 @@ export default async function handler(req, res) {
     .settore-sommario:hover { background: #fafafa; }
     .badge-settore { display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; color: white; font-weight: 700; letter-spacing: .01em; flex-shrink: 0; }
     .settore-nome { flex: 1; font-size: 14px; font-weight: 600; color: #1f2937; }
-    .settore-conteggio { background: #f3f4f6; color: #374151; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
+    .settore-conteggio { background: #F0EEE8; color: #374151; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
     .settore-freccia { color: #9ca3af; transition: transform .15s; }
     .settore-riga.aperta .settore-freccia { transform: rotate(180deg); }
     .settore-clienti { display: none; padding: 0 16px 14px 47px; }
@@ -259,7 +259,7 @@ export default async function handler(req, res) {
     .lista-clienti-settore { list-style: none; margin: 0; padding: 0; }
     .lista-clienti-settore li { padding: 7px 0; border-bottom: 1px solid #f6f7f8; font-size: 13.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .lista-clienti-settore li:last-child { border-bottom: none; }
-    .lista-clienti-settore a { color: #4f46e5; text-decoration: none; font-weight: 600; }
+    .lista-clienti-settore a { color: #0E6E62; text-decoration: none; font-weight: 600; }
     .lista-clienti-settore a:hover { text-decoration: underline; }
     .mini-stat { color: #9ca3af; font-size: 12px; margin-left: auto; }
     .empty-settore { color: #9ca3af; font-size: 13px; padding: 6px 0; font-style: italic; }

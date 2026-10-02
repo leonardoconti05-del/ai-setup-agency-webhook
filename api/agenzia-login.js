@@ -21,17 +21,20 @@ function escapeHtml(str) {
 
 function paginaLogin({ errore } = {}) {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Setup Agency — Accesso agenzia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"></head>
-  <body style="font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:radial-gradient(circle at top, #1e293b, #0f172a);margin:0;-webkit-font-smoothing:antialiased;">
-    <div style="background:white;padding:36px 32px;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.35);max-width:340px;width:100%;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4f46e5;margin-bottom:6px;">AI Setup Agency</div>
-      <h2 style="margin:0 0 4px;color:#0f172a;display:flex;align-items:center;gap:8px;"><span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;border-radius:8px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;">${icon('building', { size: 15 })}</span> Area amministrativa</h2>
+  <title>AI Setup Agency — Accesso agenzia</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet"></head>
+  <body style="font-family:'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#15181D;margin:0;-webkit-font-smoothing:antialiased;">
+    <div style="background:white;padding:36px 32px;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.3);max-width:340px;width:100%;">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:22px;">
+        <span style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;border-radius:8px;background:#0E6E62;color:white;">${icon('building', { size: 14 })}</span>
+        <span style="font-weight:700;font-size:14.5px;color:#15181D;letter-spacing:-.01em;">AI Setup Agency</span>
+      </div>
+      <h2 style="margin:0 0 4px;color:#15181D;font-size:1.3rem;letter-spacing:-.01em;">Area amministrativa</h2>
       <p style="color:#6b7280;font-size:0.9rem;margin-bottom:18px;">Accesso riservato al titolare.</p>
       ${errore ? `<div style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:9px;margin-bottom:14px;font-size:0.85rem;">${escapeHtml(errore)}</div>` : ''}
       <form method="POST" action="/api/agenzia-login">
         <input type="password" name="password" placeholder="Password" required autofocus
           style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid #d5d8dc;border-radius:9px;font-size:0.95rem;margin-bottom:14px;font-family:inherit;" />
-        <button type="submit" style="width:100%;background:#4f46e5;color:white;border:none;padding:12px;border-radius:9px;font-size:0.95rem;font-weight:600;cursor:pointer;transition:background .15s ease;">Accedi</button>
+        <button type="submit" style="width:100%;background:#0E6E62;color:white;border:none;padding:12px;border-radius:9px;font-size:0.95rem;font-weight:600;cursor:pointer;transition:background .15s ease;">Accedi</button>
       </form>
     </div>
   </body></html>`;

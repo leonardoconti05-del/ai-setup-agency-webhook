@@ -36,11 +36,11 @@ function escapeHtml(text) {
 
 function paginaNonAutenticato() {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-  <body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f3f4f6;">
+  <body style="font-family:'Archivo',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#FAFAF8;">
     <div style="background:white;padding:32px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center;">
       <h2 style="margin-top:0;">Sessione scaduta o non autenticata</h2>
       <p style="color:#6b7280;">Accedi di nuovo con il tuo codice.</p>
-      <a href="/api/dashboard-login" style="display:inline-block;background:#4f46e5;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Vai al login</a>
+      <a href="/api/dashboard-login" style="display:inline-block;background:#0E6E62;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;">Vai al login</a>
     </div>
   </body></html>`;
 }
@@ -284,22 +284,22 @@ export default async function handler(req, res) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="refresh" content="60">
-  <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>AI Setup Agency — ${escapeHtml(nomeAttivita)}</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); color: #0f172a; -webkit-font-smoothing: antialiased; }
+    body { font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: #FAFAF8; color: #15181D; -webkit-font-smoothing: antialiased; }
     .app-shell { display: flex; min-height: 100vh; }
-    .sidebar { width: 240px; flex-shrink: 0; background: #0f172a; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
+    .sidebar { width: 240px; flex-shrink: 0; background: #15181D; color: #d1d5db; padding: 20px 0; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
     .sidebar-brand { padding: 0 20px 18px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 14px; }
-    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: linear-gradient(135deg, #4f46e5, #6366f1); color: white; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
+    .sidebar-brand .marchio { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; background: #0E6E62; color: white; }
     .sidebar-brand h1 { font-size: 14px; margin: 0; color: white; letter-spacing: -.01em; }
     .sidebar-brand .settore { font-size: 11px; color: #9ca3af; margin-top: 1px; }
     .icona-ui { flex-shrink: 0; vertical-align: -3px; }
     .sidebar-group { margin-bottom: 14px; }
     .sidebar-group-titolo { font-size: 10px; text-transform: uppercase; color: #6b7280; letter-spacing: .06em; padding: 0 20px 6px; }
-    .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; color: #d1d5db; font-size: 13.5px; text-decoration: none; cursor: pointer; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
-    .sidebar-link:hover { background: rgba(255,255,255,.06); color: white; }
-    .sidebar-link.attivo { background: linear-gradient(135deg, #4f46e5, #4338ca); color: white; font-weight: 600; box-shadow: 0 2px 8px rgba(79,70,229,.35); }
+    .sidebar-link { display: flex; align-items: center; gap: 9px; padding: 9px 20px; border-left: 3px solid transparent; color: #a9adb4; font-size: 13.5px; text-decoration: none; cursor: pointer; border-top: none; border-right: none; border-bottom: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+    .sidebar-link:hover { background: rgba(255,255,255,.05); color: white; }
+    .sidebar-link.attivo { background: rgba(255,255,255,.06); border-left: 3px solid #138577; padding-left: 17px; color: white; font-weight: 600; }
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
@@ -314,16 +314,16 @@ export default async function handler(req, res) {
     .stat-label { font-size: 12px; color: #6b7280; margin-top: 2px; }
     .griglia-2col { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 20px; }
     .griglia-sezioni { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-    .card { background: white; border-radius: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.06); overflow: hidden; padding: 20px 22px; }
+    .card { background: white; border: 1px solid #E3E1DB; border-radius: 10px; box-shadow: none; overflow: hidden; padding: 20px 22px; }
     .card h2 { font-size: 14.5px; margin: 0 0 4px; letter-spacing: -.01em; display: flex; align-items: center; gap: 7px; color: #1e293b; }
-    .card h2 .icona-ui { color: #6366f1; }
+    .card h2 .icona-ui { color: #138577; }
     .card p.desc { color: #9ca3af; font-size: 12px; margin: 0 0 14px; }
     .alert-attenzione { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .alert-attenzione.ok { background: #f0fdf4; border-color: #bbf7d0; }
-    .alert-attenzione a { color: #4f46e5; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .alert-attenzione a { color: #0E6E62; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
     .analytics-grid { display: flex; gap: 22px; flex-wrap: wrap; }
     .analytics-num-blocco { min-width: 90px; }
-    .analytics-num { font-size: 24px; font-weight: 700; color: #0f172a; }
+    .analytics-num { font-size: 24px; font-weight: 700; color: #15181D; }
     .analytics-label { font-size: 11.5px; color: #6b7280; margin-top: 2px; }
     .lista-appuntamenti { list-style: none; margin: 0; padding: 0; }
     .lista-appuntamenti li { padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 13.5px; }
@@ -340,7 +340,7 @@ export default async function handler(req, res) {
     .lista-persone li { padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
     .lista-persone li:last-child { border-bottom: none; }
     .sezione-vuota { color: #9ca3af; font-size: 13px; padding: 8px 0; }
-    .sezione-vuota a { color: #4f46e5; text-decoration: none; }
+    .sezione-vuota a { color: #0E6E62; text-decoration: none; }
     .griglia-orari-mini { display: flex; flex-direction: column; gap: 4px; }
     .giorno-orario { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid #f6f7f8; }
     .giorno-orario:last-child { border-bottom: none; }
@@ -348,17 +348,17 @@ export default async function handler(req, res) {
     .giorno-valore { color: #374151; text-align: right; }
     .giorno-orario.chiuso .giorno-valore { color: #9ca3af; }
     .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-    .telefono { color: #4f46e5; text-decoration: none; }
+    .telefono { color: #0E6E62; text-decoration: none; }
     .telefono:hover { text-decoration: underline; }
     .data-col { color: #6b7280; font-size: 12.5px; white-space: nowrap; }
     .btn-stato { font: inherit; font-size: 11.5px; padding: 4px 9px; border-radius: 7px; border: 1px solid #d1d5db; color: #374151; background: #f9fafb; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
-    .btn-stato:hover { background: #eef2ff; border-color: #a5b4fc; color: #4338ca; }
+    .btn-stato:hover { background: #eef2ff; border-color: #a5b4fc; color: #0A4F46; }
     .empty { text-align: center; padding: 50px 20px; color: #9ca3af; }
     footer { text-align: center; color: #9ca3af; font-size: 12px; margin-top: 24px; }
     /* Inbox conversazioni */
     .conv-filtri { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
     .conv-filtro { font: inherit; font-size: 12.5px; padding: 6px 14px; border-radius: 20px; border: 1px solid #d1d5db; background: white; color: #374151; cursor: pointer; }
-    .conv-filtro.attivo { background: #0f172a; color: white; border-color: #0f172a; }
+    .conv-filtro.attivo { background: #15181D; color: white; border-color: #15181D; }
     .conv-riga { border-bottom: 1px solid #f0f1f3; }
     .conv-riga:last-child { border-bottom: none; }
     .conv-sommario { display: flex; align-items: center; gap: 14px; padding: 14px 4px; cursor: pointer; flex-wrap: wrap; }
@@ -374,7 +374,7 @@ export default async function handler(req, res) {
     .conv-riga.aperta .conv-thread { display: block; }
     .msg-bolla { max-width: 70%; padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 13.5px; line-height: 1.4; }
     .msg-etichetta { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 3px; opacity: .65; }
-    .msg-utente { background: #f3f4f6; color: #0f172a; margin-right: auto; }
+    .msg-utente { background: #F0EEE8; color: #15181D; margin-right: auto; }
     .msg-ai { background: #eef2ff; color: #312e81; margin-left: auto; text-align: right; }
     @media (max-width: 860px) {
       .app-shell { flex-direction: column; }
@@ -463,7 +463,7 @@ export default async function handler(req, res) {
           </div>
           ${roiStimato != null
             ? `<p class="desc" style="margin-top:12px;margin-bottom:0;">*Stima basata sul valore medio che hai indicato (€${valoreMedioCliente.toLocaleString('it-IT')} per ${et.evento.toLowerCase()}) — non è fatturato garantito.</p>`
-            : `<p class="desc" style="margin-top:12px;margin-bottom:0;">Vuoi vedere anche una stima del valore generato? <a href="/api/info-cliente" style="color:#4f46e5;">Imposta il valore medio</a>.</p>`}
+            : `<p class="desc" style="margin-top:12px;margin-bottom:0;">Vuoi vedere anche una stima del valore generato? <a href="/api/info-cliente" style="color:#0E6E62;">Imposta il valore medio</a>.</p>`}
         </div>
       </div>
 
@@ -483,7 +483,7 @@ export default async function handler(req, res) {
 
       <div class="tab-pannello" data-pannello="attivita">
         <div class="main-titolo">${icon('folder', { size: 20 })} Servizi, personale e orari</div>
-        <p class="main-sub">Questi dati alimentano anche le risposte del bot ai clienti. <a href="/api/info-cliente" style="color:#4f46e5;text-decoration:none;">Modifica tutto &rarr;</a></p>
+        <p class="main-sub">Questi dati alimentano anche le risposte del bot ai clienti. <a href="/api/info-cliente" style="color:#0E6E62;text-decoration:none;">Modifica tutto &rarr;</a></p>
         <div class="griglia-sezioni">
           <div class="card">
             <h2>${icon('list')} Servizi offerti</h2>

@@ -49,14 +49,15 @@ function opzioniSettore(selezionato) {
 function paginaForm({ errore, valori = {} } = {}) {
   return `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Setup Agency — Crea il tuo account</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 32px 16px; background: radial-gradient(1100px 500px at 15% -10%, #eef0fb 0%, #f4f5f9 45%, #f4f5f9 100%); color: #0f172a; -webkit-font-smoothing: antialiased; }
-    .card { background: white; padding: 36px 32px; border-radius: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 28px rgba(15,23,42,.08); max-width: 420px; width: 100%; }
-    .marchio { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-bottom: 14px; border-radius: 11px; background: linear-gradient(135deg,#4f46e5,#6366f1); color: white; box-shadow: 0 2px 8px rgba(79,70,229,.4); }
-    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #4f46e5; margin-bottom: 6px; }
-    h2 { margin: 0 0 4px; color: #0f172a; letter-spacing: -.01em; }
+    body { font-family: 'Archivo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 32px 16px; background: #FAFAF8; color: #15181D; -webkit-font-smoothing: antialiased; }
+    .card { background: white; padding: 36px 32px; border-radius: 12px; border: 1px solid #E3E1DB; max-width: 420px; width: 100%; }
+    .marchio-riga { display: flex; align-items: center; gap: 9px; margin-bottom: 24px; }
+    .marchio { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; background: #0E6E62; color: white; }
+    .nome-prodotto { font-weight: 700; font-size: 14.5px; color: #15181D; letter-spacing: -.01em; }
+    h2 { margin: 0 0 4px; color: #15181D; letter-spacing: -.01em; font-size: 1.3rem; }
     p.sub { color: #6b7280; font-size: 0.9rem; margin: 0 0 22px; }
     label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #374151; }
     .campo { margin-bottom: 16px; }
@@ -65,17 +66,19 @@ function paginaForm({ errore, valori = {} } = {}) {
       font-size: 0.95rem; font-family: inherit; background: white;
     }
     .nota-campo { font-size: 12px; color: #9ca3af; margin-top: 5px; }
-    button { width: 100%; background: #4f46e5; color: white; border: none; padding: 12px; border-radius: 9px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background .15s ease; margin-top: 4px; }
-    button:hover { background: #4338ca; }
+    button { width: 100%; background: #0E6E62; color: white; border: none; padding: 12px; border-radius: 9px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background .15s ease; margin-top: 4px; }
+    button:hover { background: #0A4F46; }
     .errore { background: #fef2f2; color: #dc2626; padding: 10px 14px; border-radius: 9px; margin-bottom: 16px; font-size: 0.85rem; }
     .accedi { text-align: center; margin-top: 18px; font-size: 13px; color: #6b7280; }
-    .accedi a { color: #4f46e5; text-decoration: none; font-weight: 600; }
+    .accedi a { color: #0E6E62; text-decoration: none; font-weight: 600; }
   </style>
   </head>
   <body>
     <div class="card">
-      <div class="marchio">${icon('sparkle', { size: 19 })}</div>
-      <div class="eyebrow">AI Setup Agency</div>
+      <div class="marchio-riga">
+        <span class="marchio">${icon('sparkle', { size: 16 })}</span>
+        <span class="nome-prodotto">AI Setup Agency</span>
+      </div>
       <h2>Crea il tuo account</h2>
       <p class="sub">Scegli il settore della tua attività e inizia subito a configurare il tuo assistente AI.</p>
       ${errore ? `<div class="errore">${escapeHtml(errore)}</div>` : ''}
