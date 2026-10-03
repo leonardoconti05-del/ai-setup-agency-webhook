@@ -245,7 +245,11 @@ async function ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, domanda) 
   }
 }
 
-async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false) {
+// log: { SUPABASE_URL, headers, requestId, clienteId, telefono } — opzionale,
+// quando presente registra l'esito reale su event_log (fase 'telegram'), così
+// lo stato di questa integrazione nella System Health dell'agenzia riflette
+// un dato vero e non la sola presenza della variabile d'ambiente.
+async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false, log = null) {
   try {
     const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_TOKEN || !chatId) return;
@@ -255,13 +259,24 @@ async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = fal
       .map(([k, v]) => `${k}: ${v || '?'}`)
       .join('\n');
     const testo = `${prefix} — ${nomeAttivita}\n${righeDati}\nTel: ${telefono}`;
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    const risposta = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text: testo }),
     });
+    if (log) {
+      if (risposta.ok) {
+        await logEvento({ ...log, fase: 'telegram' });
+      } else {
+        const corpo = await risposta.text();
+        await logEvento({ ...log, fase: 'telegram', stato: 'errore', dettaglio: { status: risposta.status, corpo: corpo.slice(0, 300) } });
+      }
+    }
   } catch (e) {
     console.error('Errore notifica Telegram:', e);
+    if (log) {
+      await logEvento({ ...log, fase: 'telegram', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
+    }
   }
 }
 
@@ -619,7 +634,7 @@ export default async function handler(req, res) {
 
     const haQualcheDato = Object.entries(datiCombinati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
     if (haQualcheDato) {
-      await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente);
+      await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono });
     }
 
     // FIX: un controllo "truthy" scarterebbe erroneamente valori come `false`

@@ -28,6 +28,48 @@ function badgeSettore(settore, size = 22) {
   return `<span class="badge-settore" style="width:${size}px;height:${size}px;background:${colore};font-size:${Math.round(size * 0.4)}px;">${escapeHtml(iniziali)}</span>`;
 }
 
+// Etichette leggibili per le "fasi" scritte in event_log da lib/logger.js
+// (vedi api/whatsapp.js) — lo stesso vocabolario usato sia nella System
+// Health sia nel Log eventi, per restare coerenti.
+const FASE_ETICHETTE = {
+  ricevuto: 'Messaggio ricevuto',
+  twilio_verificato: 'WhatsApp (Twilio)',
+  tenant_identificato: 'Identificazione cliente',
+  conversazione_recuperata: 'Database (Supabase)',
+  knowledge_base: 'Knowledge Base',
+  claude: 'Assistente AI (Claude)',
+  estrazione_dati: 'Estrazione dati',
+  calendar: 'Google Calendar',
+  telegram: 'Telegram (notifiche staff)',
+  follow_up_inviato: 'Follow-up automatico',
+  limite_mensile: 'Limite messaggi mensile',
+  esito: 'Esito elaborazione',
+};
+
+// Sottoinsieme di fasi mostrato come "integrazione" nella System Health —
+// solo quelle che corrispondono a un servizio esterno reale, non ogni
+// singolo passaggio interno della pipeline.
+const INTEGRAZIONI = [
+  { fase: 'twilio_verificato', nome: 'WhatsApp (Twilio)' },
+  { fase: 'claude', nome: 'Assistente AI (Claude)' },
+  { fase: 'conversazione_recuperata', nome: 'Database (Supabase)' },
+  { fase: 'knowledge_base', nome: 'Knowledge Base' },
+  { fase: 'calendar', nome: 'Google Calendar' },
+  { fase: 'telegram', nome: 'Telegram (notifiche staff)' },
+  { fase: 'follow_up_inviato', nome: 'Follow-up automatici' },
+];
+
+function tempoRelativo(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return 'adesso';
+  if (min < 60) return `${min} min fa`;
+  const ore = Math.floor(min / 60);
+  if (ore < 24) return `${ore} ${ore === 1 ? 'ora' : 'ore'} fa`;
+  const giorni = Math.floor(ore / 24);
+  return `${giorni} ${giorni === 1 ? 'giorno' : 'giorni'} fa`;
+}
+
 function paginaNonAutenticato() {
   return `<!DOCTYPE html><html lang="it"><body style="font-family:'Archivo',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#15181D;margin:0;">
     <div style="background:white;padding:32px;border-radius:12px;text-align:center;">
@@ -61,20 +103,64 @@ export default async function handler(req, res) {
   const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
 
   try {
-    const [clientiRes, configRes, richiesteRes] = await Promise.all([
+    const [clientiRes, configRes, richiesteRes, eventiRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/clienti?select=id,nome_attivita&order=nome_attivita.asc`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/configurazioni_cliente?select=cliente_id,settore,attivo,follow_up_attivo,valore_medio_cliente`, { headers }),
       fetch(`${SUPABASE_URL}/rest/v1/richieste_clienti?select=cliente_id,stato,dati_raccolti,updated_at`, { headers }),
+      fetch(`${SUPABASE_URL}/rest/v1/event_log?select=id,cliente_id,fase,stato,dettaglio,created_at&order=created_at.desc&limit=300`, { headers }),
     ]);
     const clienti = await clientiRes.json();
     const configurazioni = await configRes.json();
     const richieste = await richiesteRes.json();
+    const eventi = await eventiRes.json();
 
     const listaClienti = Array.isArray(clienti) ? clienti : [];
     const listaConfig = Array.isArray(configurazioni) ? configurazioni : [];
     const listaRichieste = Array.isArray(richieste) ? richieste : [];
+    const listaEventi = Array.isArray(eventi) ? eventi : [];
 
     const configPerCliente = Object.fromEntries(listaConfig.map((c) => [c.cliente_id, c]));
+    const nomePerClienteId = Object.fromEntries(listaClienti.map((c) => [c.id, c.nome_attivita]));
+
+    // ===== System Health: stato più recente per ogni integrazione reale,
+    // dedotto da event_log — mai inventato. Se un'integrazione non compare
+    // negli ultimi 300 eventi, lo stato è esplicitamente "nessun dato
+    // recente", non "operativo" per default. =====
+    const ultimoEventoPerFase = {};
+    for (const ev of listaEventi) {
+      if (!ultimoEventoPerFase[ev.fase]) ultimoEventoPerFase[ev.fase] = ev;
+    }
+    const righeSalute = INTEGRAZIONI.map(({ fase, nome }) => {
+      const ev = ultimoEventoPerFase[fase];
+      if (!ev) return { nome, stato: 'sconosciuto', etichetta: 'Nessun dato recente', quando: null };
+      const ok = ev.stato !== 'errore';
+      return {
+        nome,
+        stato: ok ? 'ok' : 'errore',
+        etichetta: ok ? 'Operativo' : 'Errore recente',
+        quando: tempoRelativo(ev.created_at),
+      };
+    });
+    const integrazioniInErrore = righeSalute.filter((r) => r.stato === 'errore').length;
+
+    // ===== Log eventi: ultime righe, per capire cosa sta facendo il
+    // sistema senza dover incrociare log Vercel a mano. =====
+    const righeEventiHtml = listaEventi.slice(0, 80).map((ev) => {
+      const nomeCliente = ev.cliente_id ? (nomePerClienteId[ev.cliente_id] || '—') : '—';
+      const etichettaFase = FASE_ETICHETTE[ev.fase] || ev.fase;
+      const isErrore = ev.stato === 'errore';
+      let dettaglioTesto = '';
+      if (ev.dettaglio && typeof ev.dettaglio === 'object') {
+        dettaglioTesto = Object.entries(ev.dettaglio).map(([k, v]) => `${k}: ${v}`).join(', ').slice(0, 140);
+      }
+      return `<tr>
+        <td class="cella-orario">${new Date(ev.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+        <td>${escapeHtml(etichettaFase)}</td>
+        <td>${escapeHtml(nomeCliente)}</td>
+        <td><span class="badge-stato-${isErrore ? 'errore' : 'ok'}">${isErrore ? 'Errore' : 'OK'}</span></td>
+        <td class="cella-dettaglio">${escapeHtml(dettaglioTesto)}</td>
+      </tr>`;
+    }).join('');
 
     // Aggregazione richieste per cliente_id (lead, appuntamenti confermati)
     const statsPerCliente = {};
@@ -221,6 +307,7 @@ export default async function handler(req, res) {
     .sidebar-link.attivo { background: rgba(255,255,255,.06); border-left: 3px solid #138577; padding-left: 17px; color: white; font-weight: 600; }
     .sidebar-link .conteggio { margin-left: auto; background: rgba(255,255,255,.15); font-size: 10.5px; padding: 1px 7px; border-radius: 10px; }
     .sidebar-link.attivo .conteggio { background: rgba(255,255,255,.3); }
+    .conteggio-errore { background: #B23A2E !important; color: white; }
     .main { flex: 1; min-width: 0; padding: 28px 32px 48px; }
     .main-titolo { font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.015em; display: flex; align-items: center; gap: 9px; }
     .main-sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
@@ -263,6 +350,24 @@ export default async function handler(req, res) {
     .lista-clienti-settore a:hover { text-decoration: underline; }
     .mini-stat { color: #9ca3af; font-size: 12px; margin-left: auto; }
     .empty-settore { color: #9ca3af; font-size: 13px; padding: 6px 0; font-style: italic; }
+    /* System Health */
+    .riga-salute { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid #f0f1f3; }
+    .riga-salute:last-child { border-bottom: none; }
+    .pallino-salute { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .pallino-ok { background: #0E6E62; }
+    .pallino-errore { background: #B23A2E; }
+    .pallino-sconosciuto { background: #d1d5db; }
+    .salute-nome { font-size: 14px; font-weight: 600; color: #1f2937; flex: 1; }
+    .salute-stato { font-size: 12.5px; font-weight: 600; }
+    .salute-stato-ok { color: #0E6E62; }
+    .salute-stato-errore { color: #B23A2E; }
+    .salute-stato-sconosciuto { color: #9ca3af; font-weight: 400; }
+    .salute-quando { font-size: 12px; color: #9ca3af; min-width: 70px; text-align: right; }
+    /* Log eventi */
+    .cella-orario { white-space: nowrap; font-size: 12.5px; color: #6b7280; font-variant-numeric: tabular-nums; }
+    .cella-dettaglio { font-size: 12.5px; color: #6b7280; max-width: 320px; }
+    .badge-stato-ok { display: inline-block; background: #e9f3f1; color: #0E6E62; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+    .badge-stato-errore { display: inline-block; background: #fbeae8; color: #B23A2E; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
     @media (max-width: 860px) {
       .app-shell { flex-direction: column; }
       .sidebar { width: 100%; height: auto; position: static; }
@@ -288,6 +393,12 @@ export default async function handler(req, res) {
       <div class="sidebar-group">
         <div class="sidebar-group-titolo">Struttura</div>
         <a href="#settori" class="sidebar-link tab-link" data-tab="settori">${icon('folder')} Tipi di attività <span class="conteggio">${Object.keys(SETTORI).length}</span></a>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-titolo">Sistema</div>
+        <a href="#sistema" class="sidebar-link tab-link" data-tab="sistema">${icon('activity')} Stato sistema${integrazioniInErrore > 0 ? ` <span class="conteggio conteggio-errore">${integrazioniInErrore}</span>` : ''}</a>
+        <a href="#eventi" class="sidebar-link tab-link" data-tab="eventi">${icon('list')} Log eventi</a>
       </div>
     </div>
 
@@ -327,6 +438,30 @@ export default async function handler(req, res) {
         <p class="main-sub">Tutti i ${Object.keys(SETTORI).length} settori supportati. Apri un tipo di attività per vedere i clienti che lo usano ed entrare nei loro servizi, personale e orari.</p>
         <div class="card">
           ${direttorioSettoriHtml}${direttorioNonImpostatoHtml}
+        </div>
+      </div>
+
+      <div class="tab-pannello" data-pannello="sistema">
+        <div class="main-titolo">${icon('activity', { size: 20 })} Stato sistema</div>
+        <p class="main-sub">Dedotto dagli eventi reali registrati negli ultimi messaggi gestiti — non un indicatore finto. Un'integrazione mai usata di recente compare come "Nessun dato recente", non come "operativa".</p>
+        <div class="card">
+          ${righeSalute.map((r) => `<div class="riga-salute">
+            <span class="pallino-salute pallino-${r.stato}"></span>
+            <span class="salute-nome">${escapeHtml(r.nome)}</span>
+            <span class="salute-stato salute-stato-${r.stato}">${escapeHtml(r.etichetta)}</span>
+            <span class="salute-quando">${r.quando ? escapeHtml(r.quando) : ''}</span>
+          </div>`).join('')}
+        </div>
+      </div>
+
+      <div class="tab-pannello" data-pannello="eventi">
+        <div class="main-titolo">${icon('list', { size: 20 })} Log eventi</div>
+        <p class="main-sub">Le ultime ${Math.min(listaEventi.length, 80)} fasi registrate, più recenti prima. Il sistema non è una scatola nera: ogni passaggio di ogni messaggio lascia una traccia qui.</p>
+        <div class="card">
+          ${righeEventiHtml ? `<table>
+            <tr><th>Quando</th><th>Fase</th><th>Cliente</th><th>Esito</th><th>Dettaglio</th></tr>
+            ${righeEventiHtml}
+          </table>` : '<div class="empty">Nessun evento registrato ancora.</div>'}
         </div>
       </div>
 
