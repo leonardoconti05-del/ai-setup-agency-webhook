@@ -463,7 +463,16 @@ export default async function handler(req, res) {
       const oreTrascorse = (Date.now() - new Date(ultimoAggiornamento).getTime()) / (1000 * 60 * 60);
       if (oreTrascorse > 48) {
         history = [];
-        datiPrecedenti = messageSid ? { _sids: [messageSid] } : {};
+        // BUG CRITICO (scoperto 3/10/2026, con dati reali di test): qui
+        // veniva pre-popolato _sids con l'ID del messaggio APPENA arrivato,
+        // PRIMA del controllo duplicati subito sotto — che quindi lo trovava
+        // sempre "già processato" e scartava il messaggio in silenzio
+        // (sendTwiml vuoto, nessuna risposta al cliente). Risultato: OGNI
+        // cliente che riscriveva dopo più di 48 ore di silenzio — il caso
+        // più comune in un business reale — non riceveva mai risposta.
+        // _sids deve ripartire vuoto: il messageSid corrente viene aggiunto
+        // correttamente DOPO il controllo duplicati (poche righe sotto).
+        datiPrecedenti = {};
       }
     }
 
