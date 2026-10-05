@@ -108,6 +108,7 @@ create index if not exists sector_eval_runs_profile_idx on sector_eval_runs (pro
 create or replace function sector_profiles_gate_production()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   if new.status = 'production' and (tg_op = 'INSERT' or old.status is distinct from 'production') then

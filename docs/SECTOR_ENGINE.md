@@ -44,3 +44,12 @@ Frasi di urgenza/sicurezza contigue (niente prossimità né fuzzy sulle red flag
 
 ## Rollback
 `update sector_profiles set status='archived' where settore='X' and status='production'` → entro 60 s il settore torna al percorso legacy. Rollback schema: vedi `010_sector_engine.sql`.
+
+## Governance (Fasi 1-2 della specifica `ARCHITETTURA_SOVEREIGN_AI_v1.md`)
+Codice in `lib/governance/`, migrazione `migrations/012_governance.sql` (non applicata al DB; il codice funziona anche senza, con default storici).
+- **Registro azioni** (`ledger.js`): append-only con hash a catena per tenant, nessun testo del cliente né telefono (solo hash salato e estratto della risposta); `scripts/verifica-ledger.mjs <cliente_id>` ne verifica l'integrità. Non è immutabilità assoluta: la service role può comunque inserire righe o cancellare il tenant.
+- **Lineage** (`lineage.js`): riferimenti alle fonti davvero date al modello (pack+versione, FAQ, sezioni dati del tenant).
+- **Minimizzazione** (`contesto.js`): al modello arrivano solo le sezioni di dati utili all'intento (prenotazione: orari e servizi; reclamo/disdetta: nessun dato; personale solo se informativo).
+- **Gateway modello** (`modello.js`): timeout 5 s (analisi) / 7 s (risposta), un retry su 429/5xx; il percorso legacy non ci passa.
+- **Autonomia** (`policy.js`): livelli 0-5, deny-by-default (azione sconosciuta = livello 1), default = comportamento storico; `reply` < 3 o = 4 → bozza in `approval_requests` e messaggio neutro al cliente; `create_calendar_event` < 3 → richiesta di conferma al titolare invece di scrivere nel calendario. Il vincolo di sicurezza del pack non è un livello e non è disattivabile.
+- **Non fatto:** interfaccia del titolare per approvare/rifiutare (esiste `risolviApprovazione`, manca dashboard/bottoni Telegram) ed esecuzione automatica dell'azione approvata; policy per `followup`/`dashboard` (definite nei default ma non ancora applicate dal codice di quei flussi).

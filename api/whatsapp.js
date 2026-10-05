@@ -4,6 +4,9 @@ import { creaRequestId, logEvento } from '../lib/logger.js';
 import { embedQuery } from '../lib/embeddings.js';
 import { caricaPackProduzione } from '../lib/engine/pack.js';
 import { eseguiMotore } from '../lib/engine/orchestratore.js';
+import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../lib/governance/ledger.js';
+import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../lib/governance/policy.js';
+import { richiediApprovazione } from '../lib/governance/approvazioni.js';
 
 function escapeXml(text) {
   return String(text)
@@ -433,6 +436,15 @@ export default async function handler(req, res) {
     const packCaricato = await caricaPackProduzione(SUPABASE_URL, headers, config.settore);
     const campiConsentiti = new Set([...campiRichiesti, 'urgente', ...(packCaricato ? packCaricato.pack.entities.map((e) => e.id) : [])]);
 
+    // Governance (registro azioni, livelli di autonomia): solo per i tenant che usano il
+    // motore. Tutto best-effort e con default = comportamento storico: se le tabelle non
+    // esistono, nulla cambia e nessun errore arriva al cliente.
+    const ctxGov = { SUPABASE_URL, headers };
+    const policyRighe = packCaricato ? await caricaPolicy(ctxGov, cliente_id) : [];
+    const ledger = (entry) => (packCaricato
+      ? registraLedger(ctxGov, { cliente_id, request_id: requestId, subject_ref: riferimentoSoggetto(cliente_id, telefono), policy_version: POLICY_VERSION, pack_version: packCaricato.version, ...entry })
+      : null);
+
     // 1. Recupera la richiesta esistente
     let history = [];
     let datiPrecedenti = {};
@@ -507,7 +519,15 @@ export default async function handler(req, res) {
         const slotObj = { inizio: new Date(slotScelto.inizio), fine: new Date(slotScelto.fine) };
 
         let reply;
-        try {
+        const polCal = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: 'create_calendar_event' });
+        if (packCaricato && !polCal.esegue) {
+          // Autonomia insufficiente per scrivere nel calendario: si registra la scelta e si chiede conferma al titolare.
+          await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'create_calendar_event', payload: { inizio: slotObj.inizio.toISOString(), fine: slotObj.fine.toISOString() } });
+          reply = 'Ho registrato la sua scelta: lo studio le confermerà l\'appuntamento a breve.';
+          datiPrecedenti._fase = 'in_attesa_conferma';
+          datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
+          await ledger({ actor: 'agent:whatsapp', action: 'calendar_event_proposed', autonomy_level: polCal.livello, approval: 'pending', reason: polCal.motivo });
+        } else try {
           await creaEvento(config.google_calendar_id, slotObj, datiPrecedenti, nomeAttivita);
           reply = `Perfetto, appuntamento confermato per ${formattaSlot(slotObj)}. A presto!`;
           datiPrecedenti._fase = 'confermato';
@@ -517,6 +537,7 @@ export default async function handler(req, res) {
           datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
           delete datiPrecedenti._slotOptions;
           await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar' });
+          await ledger({ actor: 'agent:whatsapp', action: 'calendar_event_created', autonomy_level: polCal.livello, reason: 'scelta_cliente' });
         } catch (e) {
           console.error('Errore creazione evento calendario:', e);
           reply = 'Ho registrato la sua scelta, ma c\'è stato un problema tecnico nel confermare l\'orario. La contatteremo noi a breve per fissare l\'appuntamento.';
@@ -603,8 +624,15 @@ export default async function handler(req, res) {
       }
     }
 
+    let polReply = null;
     if (esitoMotore) {
+      polReply = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: esitoMotore.handoff ? 'handoff' : 'reply' });
       reply = esitoMotore.reply;
+      if (!polReply.esegue) {
+        // Il titolare ha limitato l'autonomia: la bozza resta in approvazione e al cliente va un messaggio neutro.
+        await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'reply', payload: { bozza: reply, intent: esitoMotore.stato.intent } });
+        reply = packCaricato.pack.escalation_rules?.messaggio_handoff || 'Passo la sua richiesta a una persona del team, che la ricontatterà.';
+      }
       history.push({ role: 'assistant', content: reply });
       for (const [k, v] of Object.entries(esitoMotore.entities || {})) {
         if (campiConsentiti.has(k)) datiNuovi[k] = v;
@@ -687,7 +715,8 @@ export default async function handler(req, res) {
     delete datiCombinati._ultimo_follow_up_il;
 
     const haQualcheDato = Object.entries(datiCombinati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
-    if (haQualcheDato || esitoMotore?.handoff) {
+    const polNotifica = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: 'notify_staff' });
+    if ((haQualcheDato || esitoMotore?.handoff) && (!packCaricato || polNotifica.esegue)) {
       const h = esitoMotore?.handoff;
       const nota = h ? `Passaggio a persona: ${h.motivo}. ${h.riassunto}${h.dati_mancanti?.length ? ` Dati mancanti: ${h.dati_mancanti.join(', ')}.` : ''}` : '';
       await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono }, nota);
@@ -737,6 +766,15 @@ export default async function handler(req, res) {
       datiNuovi: datiCombinati, stato, history, ultimoAggiornamento,
     });
 
+    if (esitoMotore) {
+      await ledger({
+        actor: 'agent:whatsapp', action: esitoMotore.handoff ? (esitoMotore.azione.action === 'emergency_escalation' ? 'emergency_escalation' : 'handoff_created') : 'reply_sent',
+        autonomy_level: polReply?.livello ?? 5, approval: polReply && !polReply.esegue ? 'pending' : 'not_required',
+        reason: esitoMotore.azione.reason, sources: esitoMotore.fonti, model: esitoMotore.telemetria.model, prompt_version: esitoMotore.prompt_version,
+        input_hash: hashTesto(messaggio), output_excerpt: reply,
+        result: esitoMotore.telemetria.origine_risposta === 'llm' || esitoMotore.telemetria.origine_risposta === 'template' ? 'ok' : esitoMotore.telemetria.origine_risposta,
+      });
+    }
     await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'esito', dettaglio: { stato, urgente } });
     return sendTwiml(res, reply);
   } catch (err) {
