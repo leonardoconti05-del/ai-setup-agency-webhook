@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { validaFirmaTwilio } from '../lib/twilio-signature.js';
 import { creaRequestId, logEvento } from '../lib/logger.js';
 import { embedQuery } from '../lib/embeddings.js';
+import { caricaPackProduzione } from '../lib/engine/pack.js';
+import { eseguiMotore } from '../lib/engine/orchestratore.js';
 
 function escapeXml(text) {
   return String(text)
@@ -249,7 +251,7 @@ async function ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, domanda) 
 // quando presente registra l'esito reale su event_log (fase 'telegram'), così
 // lo stato di questa integrazione nella System Health dell'agenzia riflette
 // un dato vero e non la sola presenza della variabile d'ambiente.
-async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false, log = null) {
+async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false, log = null, nota = '') {
   try {
     const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_TOKEN || !chatId) return;
@@ -258,7 +260,7 @@ async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = fal
       .filter(([k]) => k !== 'urgente' && !k.startsWith('_'))
       .map(([k, v]) => `${k}: ${v || '?'}`)
       .join('\n');
-    const testo = `${prefix} — ${nomeAttivita}\n${righeDati}\nTel: ${telefono}`;
+    const testo = `${prefix} — ${nomeAttivita}\n${righeDati}${nota ? `\n${nota}` : ''}\nTel: ${telefono}`;
     const risposta = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -425,7 +427,11 @@ export default async function handler(req, res) {
     // Campi previsti per questo cliente — usato sia per il prompt di estrazione
     // sia per "sanificare" il risultato dell'estrazione più sotto.
     const campiRichiesti = Array.isArray(config.campi_da_raccogliere) ? config.campi_da_raccogliere.map((c) => c.campo) : [];
-    const campiConsentiti = new Set([...campiRichiesti, 'urgente']);
+    // Motore verticale: attivo SOLO se per il settore di questo tenant esiste un
+    // pack in produzione (sector_profiles). Altrimenti (o se il caricamento
+    // fallisce) il percorso è identico a quello precedente.
+    const packCaricato = await caricaPackProduzione(SUPABASE_URL, headers, config.settore);
+    const campiConsentiti = new Set([...campiRichiesti, 'urgente', ...(packCaricato ? packCaricato.pack.entities.map((e) => e.id) : [])]);
 
     // 1. Recupera la richiesta esistente
     let history = [];
@@ -570,64 +576,103 @@ export default async function handler(req, res) {
     const contestoKB = await ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, messaggio);
     await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'knowledge_base', dettaglio: { trovato: contestoKB.length > 0 } });
 
-    const SYSTEM_PROMPT = buildSystemPrompt(config, nomeAttivita, contestoKB);
-    const EXTRACTION_TOOL = buildExtractionTool(config);
-
-    const chatResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, system: SYSTEM_PROMPT, messages: history }),
-    });
-    const chatData = await chatResponse.json();
-
-    if (!chatData.content) {
-      console.error('Anthropic chat error:', JSON.stringify(chatData));
-      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude', stato: 'errore', dettaglio: { risposta: chatData } });
-      return sendTwiml(res, 'Al momento non riesco a risponderle, la contatteremo noi appena possibile.');
-    }
-    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude' });
-
-    let reply = chatData.content.find((b) => b.type === 'text')?.text || 'Mi scusi, può ripetere?';
-    history.push({ role: 'assistant', content: reply });
-
-    // ===== Estrazione campi tramite tool-use forzato =====
-    // FIX ALLA RADICE: prima chiedevamo a Claude di scrivere JSON come testo
-    // libero e lo interpretavamo a mano — un modo di procedere fragile, che
-    // ha causato il bug della volta scorsa (array invece di oggetto).
-    // Con il tool-use, è l'API stessa a garantire che l'output rispetti lo
-    // schema dichiarato (un oggetto con esattamente i campi previsti): la
-    // classe di bug "formato inatteso" non può più verificarsi.
+    // ===== PERCORSO MOTORE (solo settori con pack in produzione) =====
+    let reply;
     let datiNuovi = {};
-    try {
-      const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
+    let esitoMotore = null;
+    if (packCaricato) {
+      try {
+        const [serviziRes, personaleRes] = await Promise.all([
+          fetch(`${SUPABASE_URL}/rest/v1/servizi_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&attivo=eq.true&select=nome,prezzo,durata_minuti`, { headers }),
+          fetch(`${SUPABASE_URL}/rest/v1/personale_cliente?cliente_id=eq.${encodeURIComponent(cliente_id)}&attivo=eq.true&select=nome,ruolo`, { headers }),
+        ]);
+        const servizi = await serviziRes.json().catch(() => []);
+        const personale = await personaleRes.json().catch(() => []);
+        esitoMotore = await eseguiMotore({
+          caricato: packCaricato, config, nomeAttivita, history, messaggio,
+          statoPrecedente: datiPrecedenti._stato, contestoKB,
+          servizi: Array.isArray(servizi) ? servizi : [], personale: Array.isArray(personale) ? personale : [],
+          campiTenant: campiRichiesti, apiKey: process.env.ANTHROPIC_API_KEY,
+        });
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'motore', dettaglio: esitoMotore.telemetria });
+      } catch (e) {
+        // Qualunque errore del motore: si torna al percorso precedente, il cliente non nota nulla.
+        console.error('Errore motore verticale (fallback al percorso legacy):', e);
+        esitoMotore = null;
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'motore', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
+      }
+    }
+
+    if (esitoMotore) {
+      reply = esitoMotore.reply;
+      history.push({ role: 'assistant', content: reply });
+      for (const [k, v] of Object.entries(esitoMotore.entities || {})) {
+        if (campiConsentiti.has(k)) datiNuovi[k] = v;
+      }
+      // L'urgenza, una volta rilevata, resta fino a quando il titolare non chiude la richiesta.
+      datiNuovi.urgente = esitoMotore.urgente || datiPrecedenti.urgente === true || datiPrecedenti.urgente === 'true';
+      datiNuovi._stato = esitoMotore.stato;
+      if (esitoMotore.handoff) datiNuovi._handoff = esitoMotore.handoff;
+    } else {
+      const SYSTEM_PROMPT = buildSystemPrompt(config, nomeAttivita, contestoKB);
+      const EXTRACTION_TOOL = buildExtractionTool(config);
+
+      const chatResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 300,
-          system: 'Estrai SOLO i dati esplicitamente forniti dal cliente in tutta la conversazione fornita, chiamando lo strumento estrai_dati.',
-          tools: [EXTRACTION_TOOL],
-          tool_choice: { type: 'tool', name: 'estrai_dati' },
-          messages: [{ role: 'user', content: JSON.stringify(history) }],
-        }),
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, system: SYSTEM_PROMPT, messages: history }),
       });
-      const extractData = await extractResponse.json();
-      const toolUseBlock = extractData.content?.find((b) => b.type === 'tool_use');
-      const input = toolUseBlock?.input;
-      if (input && typeof input === 'object' && !Array.isArray(input)) {
-        for (const [k, v] of Object.entries(input)) {
-          if (campiConsentiti.has(k)) {
-            datiNuovi[k] = v;
-          }
-        }
-        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati' });
-      } else {
-        console.error('Estrazione campi: nessun tool_use valido nella risposta:', JSON.stringify(extractData));
-        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { risposta: extractData } });
+      const chatData = await chatResponse.json();
+
+      if (!chatData.content) {
+        console.error('Anthropic chat error:', JSON.stringify(chatData));
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude', stato: 'errore', dettaglio: { risposta: chatData } });
+        return sendTwiml(res, 'Al momento non riesco a risponderle, la contatteremo noi appena possibile.');
       }
-    } catch (e) {
-      console.error('Errore estrazione campi:', e);
-      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
+      await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'claude' });
+
+      reply = chatData.content.find((b) => b.type === 'text')?.text || 'Mi scusi, può ripetere?';
+      history.push({ role: 'assistant', content: reply });
+
+      // ===== Estrazione campi tramite tool-use forzato =====
+      // FIX ALLA RADICE: prima chiedevamo a Claude di scrivere JSON come testo
+      // libero e lo interpretavamo a mano — un modo di procedere fragile, che
+      // ha causato il bug della volta scorsa (array invece di oggetto).
+      // Con il tool-use, è l'API stessa a garantire che l'output rispetti lo
+      // schema dichiarato (un oggetto con esattamente i campi previsti): la
+      // classe di bug "formato inatteso" non può più verificarsi.
+      try {
+        const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 300,
+            system: 'Estrai SOLO i dati esplicitamente forniti dal cliente in tutta la conversazione fornita, chiamando lo strumento estrai_dati.',
+            tools: [EXTRACTION_TOOL],
+            tool_choice: { type: 'tool', name: 'estrai_dati' },
+            messages: [{ role: 'user', content: JSON.stringify(history) }],
+          }),
+        });
+        const extractData = await extractResponse.json();
+        const toolUseBlock = extractData.content?.find((b) => b.type === 'tool_use');
+        const input = toolUseBlock?.input;
+        if (input && typeof input === 'object' && !Array.isArray(input)) {
+          for (const [k, v] of Object.entries(input)) {
+            if (campiConsentiti.has(k)) {
+              datiNuovi[k] = v;
+            }
+          }
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati' });
+        } else {
+          console.error('Estrazione campi: nessun tool_use valido nella risposta:', JSON.stringify(extractData));
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { risposta: extractData } });
+        }
+      } catch (e) {
+        console.error('Errore estrazione campi:', e);
+        await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'estrazione_dati', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
+      }
+
     }
 
     const datiCombinati = { ...datiPrecedenti, ...datiNuovi };
@@ -642,8 +687,10 @@ export default async function handler(req, res) {
     delete datiCombinati._ultimo_follow_up_il;
 
     const haQualcheDato = Object.entries(datiCombinati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
-    if (haQualcheDato) {
-      await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono });
+    if (haQualcheDato || esitoMotore?.handoff) {
+      const h = esitoMotore?.handoff;
+      const nota = h ? `Passaggio a persona: ${h.motivo}. ${h.riassunto}${h.dati_mancanti?.length ? ` Dati mancanti: ${h.dati_mancanti.join(', ')}.` : ''}` : '';
+      await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono }, nota);
     }
 
     // FIX: un controllo "truthy" scarterebbe erroneamente valori come `false`
@@ -651,12 +698,17 @@ export default async function handler(req, res) {
     // urgenza risposto con "no"). Consideriamo "vuoto" solo null/undefined
     // e la stringa vuota.
     // campoValido esportata più sotto per il test automatico (stessa logica)
-    const tuttiCompilati = campiRichiesti.length > 0 && campiRichiesti.every((c) => campoValido(datiCombinati[c]));
+    // Con il motore, il completamento lo decide l'azione pianificata (dati
+    // richiesti dall'intent, non solo i campi del tenant); altrimenti la regola di sempre.
+    const tuttiCompilati = esitoMotore
+      ? esitoMotore.completo
+      : campiRichiesti.length > 0 && campiRichiesti.every((c) => campoValido(datiCombinati[c]));
+    const proponiSlot = esitoMotore ? esitoMotore.azione.action === 'propose_slot' : tuttiCompilati;
 
-    let stato = urgente ? 'urgente' : tuttiCompilati ? 'completata' : 'in_corso';
+    let stato = urgente ? 'urgente' : esitoMotore?.handoff ? 'handoff' : tuttiCompilati ? 'completata' : 'in_corso';
 
     // ===== Se i dati sono completi, non urgente, e c'è un calendario: proponi slot =====
-    if (tuttiCompilati && !urgente && config.google_calendar_id && datiCombinati._fase !== 'confermato') {
+    if (proponiSlot && !urgente && config.google_calendar_id && datiCombinati._fase !== 'confermato') {
       try {
         const slots = await trovaSlotDisponibili(config.google_calendar_id);
         if (slots.length > 0) {

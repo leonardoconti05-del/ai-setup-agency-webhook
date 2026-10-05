@@ -144,7 +144,8 @@ export default async function handler(req, res) {
     const contaUrgenti = lista.filter((r) => r.stato === 'urgente').length;
     const contaInCorso = lista.filter((r) => r.stato === 'in_corso').length;
     const contaCompletate = lista.filter((r) => r.stato === 'completata').length;
-    const contaAttenzione = contaUrgenti + contaInCorso;
+    const contaHandoff = lista.filter((r) => r.stato === 'handoff').length;
+    const contaAttenzione = contaUrgenti + contaInCorso + contaHandoff;
 
     const contaLead = lista.filter((r) => {
       const dati = r.dati_raccolti || {};
@@ -199,6 +200,7 @@ export default async function handler(req, res) {
 
     const statoBadge = {
       urgente: { colore: '#dc2626', bg: '#fef2f2', label: 'Urgente', icona: 'alert' },
+      handoff: { colore: '#7c3aed', bg: '#f5f3ff', label: 'Da richiamare', icona: 'alert' },
       completata: { colore: '#16a34a', bg: '#f0fdf4', label: 'Completata', icona: 'check' },
       in_corso: { colore: '#d97706', bg: '#fffbeb', label: 'In corso', icona: 'clock' },
     };
@@ -474,6 +476,7 @@ export default async function handler(req, res) {
           <div class="conv-filtri">
             <button class="conv-filtro attivo" data-filtro="tutte">Tutte (${contaTotali})</button>
             <button class="conv-filtro" data-filtro="urgente">Urgenti (${contaUrgenti})</button>
+            ${contaHandoff > 0 ? `<button class="conv-filtro" data-filtro="handoff">Da richiamare (${contaHandoff})</button>` : ''}
             <button class="conv-filtro" data-filtro="in_corso">In corso (${contaInCorso})</button>
             <button class="conv-filtro" data-filtro="completata">Completate (${contaCompletate})</button>
           </div>
