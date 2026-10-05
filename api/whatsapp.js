@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import { getGoogleAccessToken, creaEvento } from '../lib/google-calendar.js';
 import { validaFirmaTwilio } from '../lib/twilio-signature.js';
 import { creaRequestId, logEvento } from '../lib/logger.js';
 import { embedQuery } from '../lib/embeddings.js';
@@ -29,42 +29,6 @@ function sendTwiml(res, message) {
   return res.status(200).send(
     `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(message)}</Message></Response>`
   );
-}
-
-// ===== GOOGLE CALENDAR: autenticazione =====
-function base64url(buf) {
-  return buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-async function getGoogleAccessToken() {
-  const keyJson = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-  const now = Math.floor(Date.now() / 1000);
-  const header = { alg: 'RS256', typ: 'JWT' };
-  const payload = {
-    iss: keyJson.client_email,
-    scope: 'https://www.googleapis.com/auth/calendar',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now,
-  };
-  const unsigned = `${base64url(Buffer.from(JSON.stringify(header)))}.${base64url(Buffer.from(JSON.stringify(payload)))}`;
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(unsigned);
-  signer.end();
-  const signature = base64url(signer.sign(keyJson.private_key));
-  const jwt = `${unsigned}.${signature}`;
-
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-  });
-  const data = await res.json();
-  if (!data.access_token) throw new Error('Token Google non ottenuto: ' + JSON.stringify(data));
-  return data.access_token;
 }
 
 // ===== GOOGLE CALENDAR: trova slot liberi =====
@@ -115,27 +79,6 @@ function formattaSlot(slot) {
   return slot.inizio.toLocaleString('it-IT', {
     weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome',
   });
-}
-
-// ===== GOOGLE CALENDAR: crea evento =====
-async function creaEvento(calendarId, slot, riepilogoDati, nomeAttivita) {
-  const accessToken = await getGoogleAccessToken();
-  const titolo = riepilogoDati.nome_paziente || riepilogoDati.nome_cliente || riepilogoDati.nome || 'Cliente';
-  const event = {
-    summary: `${nomeAttivita} — ${titolo}`,
-    description: Object.entries(riepilogoDati)
-      .filter(([k]) => !k.startsWith('_'))
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n'),
-    start: { dateTime: slot.inizio.toISOString(), timeZone: 'Europe/Rome' },
-    end: { dateTime: slot.fine.toISOString(), timeZone: 'Europe/Rome' },
-  };
-  const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(event),
-  });
-  return res.json();
 }
 
 // ===== Prompt dinamici =====
@@ -522,7 +465,7 @@ export default async function handler(req, res) {
         const polCal = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: 'create_calendar_event' });
         if (packCaricato && !polCal.esegue) {
           // Autonomia insufficiente per scrivere nel calendario: si registra la scelta e si chiede conferma al titolare.
-          await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'create_calendar_event', payload: { inizio: slotObj.inizio.toISOString(), fine: slotObj.fine.toISOString() } });
+          await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'create_calendar_event', payload: { numero_utente: telefono, inizio: slotObj.inizio.toISOString(), fine: slotObj.fine.toISOString() } });
           reply = 'Ho registrato la sua scelta: lo studio le confermerà l\'appuntamento a breve.';
           datiPrecedenti._fase = 'in_attesa_conferma';
           datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
@@ -630,7 +573,7 @@ export default async function handler(req, res) {
       reply = esitoMotore.reply;
       if (!polReply.esegue) {
         // Il titolare ha limitato l'autonomia: la bozza resta in approvazione e al cliente va un messaggio neutro.
-        await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'reply', payload: { bozza: reply, intent: esitoMotore.stato.intent } });
+        await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'reply', payload: { numero_utente: telefono, bozza: reply, intent: esitoMotore.stato.intent } });
         reply = packCaricato.pack.escalation_rules?.messaggio_handoff || 'Passo la sua richiesta a una persona del team, che la ricontatterà.';
       }
       history.push({ role: 'assistant', content: reply });

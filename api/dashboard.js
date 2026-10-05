@@ -25,6 +25,7 @@
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
 import { icon } from '../lib/icons.js';
+import { decidiApprovazione, elencoApprovazioniPending } from '../lib/governance/esegui-approvata.js';
 
 function escapeHtml(text) {
   return String(text || '')
@@ -93,6 +94,16 @@ export default async function handler(req, res) {
   try {
     // ===== Cambio stato: solo POST, cliente_id preso dalla sessione =====
     if (req.method === 'POST') {
+      // Decisione su una richiesta di approvazione dell'AI (livello 4).
+      if (req.body?.approvazione_id) {
+        const esito = await decidiApprovazione(
+          { SUPABASE_URL, headers },
+          { cliente_id, id: String(req.body.approvazione_id), decisione: req.body.decisione === 'approved' ? 'approved' : 'rejected', decided_by: 'titolare' }
+        );
+        const msg = esito.ok ? (esito.eseguita === false ? `Approvata ma non eseguita: ${esito.esito}` : esito.esito) : esito.motivo;
+        res.writeHead(302, { Location: '/api/dashboard?esito=' + encodeURIComponent(msg || '') });
+        return res.end();
+      }
       const { numero_utente, nuovo_stato } = req.body || {};
       if (!numero_utente || !nuovo_stato) {
         return res.status(400).send('Parametri mancanti');
@@ -181,6 +192,28 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('Errore conteggio messaggi/follow-up:', e);
     }
+
+    // ===== Azioni dell'AI in attesa di approvazione (migrations/012) =====
+    const approvazioni = await elencoApprovazioniPending({ SUPABASE_URL, headers }, cliente_id);
+    const esitoDecisione = req.query?.esito ? String(req.query.esito).slice(0, 200) : '';
+    const descriviApprovazione = (a) => {
+      const p = a.payload || {};
+      if (a.action === 'create_calendar_event') return `Creare l'appuntamento del ${new Date(p.inizio).toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })} e avvisare il cliente`;
+      if (a.action === 'reply') return `Inviare questa risposta: «${String(p.bozza || '').slice(0, 300)}»`;
+      return `Azione: ${a.action}`;
+    };
+    const approvazioniHtml = approvazioni.length > 0
+      ? `<div class="alert-attenzione" style="display:block;">
+          <div style="font-weight:700;margin-bottom:8px;">${icon('alert', { size: 17 })} L'assistente chiede la tua approvazione (${approvazioni.length})</div>
+          ${approvazioni.map((a) => `<div style="padding:8px 0;border-top:1px solid #fde68a;">
+            <div style="font-size:13px;">${escapeHtml(descriviApprovazione(a))}</div>
+            <div style="font-size:12px;color:#6b7280;margin:2px 0 6px;">Cliente ${escapeHtml(a.payload?.numero_utente || '—')}</div>
+            <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="approved" /><button type="submit" class="btn-stato">Approva ed esegui</button></form>
+            <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="rejected" /><button type="submit" class="btn-stato">Rifiuta</button></form>
+          </div>`).join('')}
+        </div>`
+      : '';
+    const esitoHtml = esitoDecisione ? `<div class="alert-attenzione ok">${icon('check', { size: 17 })}<span>${escapeHtml(esitoDecisione)}</span></div>` : '';
 
     // ===== Servizi e personale (migrations/008) =====
     let servizi = [];
@@ -425,6 +458,7 @@ export default async function handler(req, res) {
 
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
+        ${esitoHtml}${approvazioniHtml}
         <div class="main-titolo">${saluto()}, ${escapeHtml(nomeAttivita)}</div>
         <p class="main-sub">La tua attività, sempre sotto controllo.</p>
 
