@@ -25,6 +25,7 @@
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
 import { icon } from '../lib/icons.js';
+import { calcolaInsight } from '../lib/insights.js';
 import { decidiApprovazione, elencoApprovazioniPending } from '../lib/governance/esegui-approvata.js';
 
 function escapeHtml(text) {
@@ -214,6 +215,25 @@ export default async function handler(req, res) {
         </div>`
       : '';
     const esitoHtml = esitoDecisione ? `<div class="alert-attenzione ok">${icon('check', { size: 17 })}<span>${escapeHtml(esitoDecisione)}</span></div>` : '';
+
+    const ins = calcolaInsight(lista, { valoreMedio: valoreMedioCliente });
+    const insightHtml = ins.conversazioni === 0
+      ? ''
+      : `<div class="card" style="margin-bottom:20px;">
+          <h2>${icon('check', { size: 15 })} Cosa ha fatto l'assistente — ultimi ${ins.giorni} giorni</h2>
+          <p class="desc">Calcolato sulle conversazioni reali. Non include stime di ore risparmiate o fatturato oltre al valore medio che hai impostato.</p>
+          <div class="analytics-grid">
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.conversazioni}</div><div class="analytics-label">conversazioni</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.appuntamenti_confermati}</div><div class="analytics-label">appuntamenti confermati</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.urgenze}</div><div class="analytics-label">urgenze</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.passate_allo_staff}</div><div class="analytics-label">passate allo staff</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.lead_da_recuperare}</div><div class="analytics-label">lead senza esito da oltre 24 ore</div></div>
+            ${ins.valore_appuntamenti != null ? `<div class="analytics-num-blocco"><div class="analytics-num">€${ins.valore_appuntamenti.toLocaleString('it-IT')}</div><div class="analytics-label">valore appuntamenti (stima da valore medio)</div></div>` : ''}
+          </div>
+          ${ins.per_intent.length ? `<p style="font-size:13px;margin:14px 0 4px;"><strong>Di cosa parlano i clienti:</strong> ${ins.per_intent.map(([i, n]) => `${escapeHtml(i.replace(/_/g, ' '))} (${n})`).join(', ')}</p>` : ''}
+          ${ins.motivi_handoff.length ? `<p style="font-size:13px;margin:4px 0;"><strong>Perché passa a una persona:</strong> ${ins.motivi_handoff.map(([m, n]) => `${escapeHtml(m)} (${n})`).join(', ')}</p>` : ''}
+          ${ins.domande_non_capite.length ? `<p style="font-size:13px;margin:10px 0 2px;"><strong>Domande che il bot non ha capito</strong> — valuta di aggiungerle alla knowledge base:</p><ul style="margin:0;padding-left:18px;font-size:13px;color:#4b5563;">${ins.domande_non_capite.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}</ul>` : ''}
+        </div>`;
 
     // ===== Servizi e personale (migrations/008) =====
     let servizi = [];
@@ -458,7 +478,7 @@ export default async function handler(req, res) {
 
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
-        ${esitoHtml}${approvazioniHtml}
+        ${esitoHtml}${approvazioniHtml}${insightHtml}
         <div class="main-titolo">${saluto()}, ${escapeHtml(nomeAttivita)}</div>
         <p class="main-sub">La tua attività, sempre sotto controllo.</p>
 
