@@ -37,3 +37,16 @@ test('motore: intent_turno distingue una nuova prenotazione da un ringraziamento
   assert.equal(cat(nuova.intent_turno), 'BOOKING');
   assert.notEqual(cat(grazie.intent_turno), 'BOOKING');
 });
+
+import { rispostaAppuntamentoEsistente } from '../lib/prenotazione.js';
+test('appuntamento futuro: ricorda quello esistente, con nome', () => {
+  const r = rispostaAppuntamentoEsistente({ fase: 'confermato', appuntamentoInizio: '2026-10-07T11:00:00.000Z', nome: 'Lorenzo', adesso: Date.parse('2026-10-06T12:00:00Z') });
+  assert.match(r, /^Ciao Lorenzo, risulta già un suo appuntamento per .*7 ottobre.*13:00/);
+});
+test('senza nome, passato, non confermato o senza data: null/maiuscola', () => {
+  const adesso = Date.parse('2026-10-06T12:00:00Z');
+  assert.match(rispostaAppuntamentoEsistente({ fase: 'confermato', appuntamentoInizio: '2026-10-07T11:00:00.000Z', adesso }), /^Risulta/);
+  assert.equal(rispostaAppuntamentoEsistente({ fase: 'confermato', appuntamentoInizio: '2026-10-01T11:00:00.000Z', adesso }), null);
+  assert.equal(rispostaAppuntamentoEsistente({ fase: 'attesa_slot', appuntamentoInizio: '2026-10-07T11:00:00.000Z', adesso }), null);
+  assert.equal(rispostaAppuntamentoEsistente({ fase: 'confermato', adesso }), null);
+});
