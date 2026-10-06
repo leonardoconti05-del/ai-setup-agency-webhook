@@ -40,6 +40,8 @@
 // modo silenzioso. Istruzioni per creare il template: docs/DECISIONS.md.
 
 import { creaRequestId, logEvento } from '../../lib/logger.js';
+import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../../lib/governance/policy.js';
+import { registra as registraLedger, riferimentoSoggetto } from '../../lib/governance/ledger.js';
 
 const MESSAGGIO_DEFAULT = (nomeAttivita) =>
   `Ciao! Siamo ancora a disposizione per la sua richiesta a ${nomeAttivita}. Se ha bisogno di altro tempo o ha domande, scriva pure qui.`;
@@ -118,7 +120,7 @@ export default async function handler(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const headers = { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
 
-  const riepilogo = { clientiEsaminati: 0, richiesteEsaminate: 0, inviati: 0, saltati: 0, errori: 0 };
+  const riepilogo = { clientiEsaminati: 0, richiesteEsaminate: 0, inviati: 0, saltati: 0, saltatiPolicy: 0, errori: 0 };
 
   try {
     // 1. Clienti con follow-up attivo (opt-in esplicito)
@@ -136,6 +138,16 @@ export default async function handler(req, res) {
     for (const config of clienti) {
       if (!dentroOrarioConsentito(config.follow_up_orario_da, config.follow_up_orario_a)) {
         continue; // fuori fascia oraria per questo cliente: riprovare al prossimo ciclo
+      }
+
+      // Autonomia decisa dal titolare: se non ha dato il livello per i follow-up
+      // automatici (livello < 3, oppure 4 = solo con approvazione) non si invia nulla.
+      // Senza righe in tenant_action_policy vale il default storico (invia).
+      const ctxGov = { SUPABASE_URL, headers };
+      const polFollowUp = valutaAzione({ righe: await caricaPolicy(ctxGov, config.cliente_id), agent: 'followup', action: 'send_followup' });
+      if (!polFollowUp.esegue) {
+        riepilogo.saltatiPolicy++;
+        continue;
       }
 
       // 2. Richieste "in_corso" (lead non convertito) di questo cliente
@@ -208,6 +220,13 @@ export default async function handler(req, res) {
             dettaglio: { numeroFollowUp: conteggioAttuale + 1, conflittoConcorrenza: !scritturaRiuscita },
           });
 
+          if (scritturaRiuscita) {
+            await registraLedger(ctxGov, {
+              cliente_id: config.cliente_id, request_id: requestId, actor: 'agent:followup', action: 'followup_sent',
+              autonomy_level: polFollowUp.livello, approval: 'not_required', reason: `follow_up_${conteggioAttuale + 1}`,
+              subject_ref: riferimentoSoggetto(config.cliente_id, richiesta.numero_utente), policy_version: POLICY_VERSION,
+            });
+          }
           if (scritturaRiuscita) riepilogo.inviati++;
           else riepilogo.saltati++;
         } catch (e) {
