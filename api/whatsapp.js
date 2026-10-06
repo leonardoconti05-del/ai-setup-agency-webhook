@@ -7,6 +7,7 @@ import { eseguiMotore } from '../lib/engine/orchestratore.js';
 import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../lib/governance/ledger.js';
 import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../lib/governance/policy.js';
 import { richiediApprovazione } from '../lib/governance/approvazioni.js';
+import { registraLacuna, tipoLacuna } from '../lib/lacune.js';
 import { puoProporreSlot, rispostaAppuntamentoEsistente } from '../lib/prenotazione.js';
 import { statoConDatiNoti } from '../lib/engine/state.js';
 
@@ -563,6 +564,8 @@ export default async function handler(req, res) {
           campiTenant: campiRichiesti, apiKey: process.env.ANTHROPIC_API_KEY,
         });
         await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'motore', dettaglio: esitoMotore.telemetria });
+        const tl = tipoLacuna(esitoMotore.azione);
+        if (tl) await registraLacuna({ SUPABASE_URL, headers }, { cliente_id, domanda: messaggio, tipo: tl, intent: esitoMotore.stato?.intent });
       } catch (e) {
         // Qualunque errore del motore: si torna al percorso precedente, il cliente non nota nulla.
         console.error('Errore motore verticale (fallback al percorso legacy):', e);
