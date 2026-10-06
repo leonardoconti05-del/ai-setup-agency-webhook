@@ -8,6 +8,7 @@ import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../l
 import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../lib/governance/policy.js';
 import { richiediApprovazione } from '../lib/governance/approvazioni.js';
 import { puoProporreSlot } from '../lib/prenotazione.js';
+import { statoDaDatiNoti } from '../lib/engine/state.js';
 
 function escapeXml(text) {
   return String(text)
@@ -557,7 +558,7 @@ export default async function handler(req, res) {
         const personale = await personaleRes.json().catch(() => []);
         esitoMotore = await eseguiMotore({
           caricato: packCaricato, config, nomeAttivita, history, messaggio,
-          statoPrecedente: datiPrecedenti._stato, contestoKB,
+          statoPrecedente: datiPrecedenti._stato || statoDaDatiNoti(datiPrecedenti, [...packCaricato.pack.entities.map((e) => e.id), ...campiRichiesti]), contestoKB,
           servizi: Array.isArray(servizi) ? servizi : [], personale: Array.isArray(personale) ? personale : [],
           campiTenant: campiRichiesti, apiKey: process.env.ANTHROPIC_API_KEY,
         });
