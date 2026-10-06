@@ -7,6 +7,7 @@ import { eseguiMotore } from '../lib/engine/orchestratore.js';
 import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../lib/governance/ledger.js';
 import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../lib/governance/policy.js';
 import { richiediApprovazione } from '../lib/governance/approvazioni.js';
+import { puoProporreSlot } from '../lib/prenotazione.js';
 
 function escapeXml(text) {
   return String(text)
@@ -680,7 +681,7 @@ export default async function handler(req, res) {
     let stato = urgente ? 'urgente' : esitoMotore?.handoff ? 'handoff' : tuttiCompilati ? 'completata' : 'in_corso';
 
     // ===== Se i dati sono completi, non urgente, e c'è un calendario: proponi slot =====
-    if (proponiSlot && !urgente && config.google_calendar_id && datiCombinati._fase !== 'confermato') {
+    if (proponiSlot && !urgente && config.google_calendar_id && puoProporreSlot({ fase: datiCombinati._fase, appuntamentoInizio: datiCombinati._appuntamento_inizio, nuovaPrenotazione: esitoMotore?.nuovaPrenotazione === true })) {
       try {
         const slots = await trovaSlotDisponibili(config.google_calendar_id);
         if (slots.length > 0) {
