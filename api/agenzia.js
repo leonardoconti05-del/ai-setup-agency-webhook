@@ -39,6 +39,7 @@ const FASE_ETICHETTE = {
   knowledge_base: 'Knowledge Base',
   claude: 'Assistente AI (Claude)',
   estrazione_dati: 'Estrazione dati',
+  motore: 'Motore verticale (intent, azione, costo)',
   calendar: 'Google Calendar',
   telegram: 'Telegram (notifiche staff)',
   follow_up_inviato: 'Follow-up automatico',

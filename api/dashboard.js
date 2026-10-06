@@ -25,6 +25,8 @@
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
 import { icon } from '../lib/icons.js';
+import { calcolaInsight } from '../lib/insights.js';
+import { decidiApprovazione, elencoApprovazioniPending } from '../lib/governance/esegui-approvata.js';
 
 function escapeHtml(text) {
   return String(text || '')
@@ -93,6 +95,16 @@ export default async function handler(req, res) {
   try {
     // ===== Cambio stato: solo POST, cliente_id preso dalla sessione =====
     if (req.method === 'POST') {
+      // Decisione su una richiesta di approvazione dell'AI (livello 4).
+      if (req.body?.approvazione_id) {
+        const esito = await decidiApprovazione(
+          { SUPABASE_URL, headers },
+          { cliente_id, id: String(req.body.approvazione_id), decisione: req.body.decisione === 'approved' ? 'approved' : 'rejected', decided_by: 'titolare' }
+        );
+        const msg = esito.ok ? (esito.eseguita === false ? `Approvata ma non eseguita: ${esito.esito}` : esito.esito) : esito.motivo;
+        res.writeHead(302, { Location: '/api/dashboard?esito=' + encodeURIComponent(msg || '') });
+        return res.end();
+      }
       const { numero_utente, nuovo_stato } = req.body || {};
       if (!numero_utente || !nuovo_stato) {
         return res.status(400).send('Parametri mancanti');
@@ -144,7 +156,8 @@ export default async function handler(req, res) {
     const contaUrgenti = lista.filter((r) => r.stato === 'urgente').length;
     const contaInCorso = lista.filter((r) => r.stato === 'in_corso').length;
     const contaCompletate = lista.filter((r) => r.stato === 'completata').length;
-    const contaAttenzione = contaUrgenti + contaInCorso;
+    const contaHandoff = lista.filter((r) => r.stato === 'handoff').length;
+    const contaAttenzione = contaUrgenti + contaInCorso + contaHandoff;
 
     const contaLead = lista.filter((r) => {
       const dati = r.dati_raccolti || {};
@@ -181,6 +194,48 @@ export default async function handler(req, res) {
       console.error('Errore conteggio messaggi/follow-up:', e);
     }
 
+    // ===== Azioni dell'AI in attesa di approvazione (migrations/012) =====
+    const approvazioni = await elencoApprovazioniPending({ SUPABASE_URL, headers }, cliente_id);
+    const esitoDecisione = req.query?.esito ? String(req.query.esito).slice(0, 200) : '';
+    const descriviApprovazione = (a) => {
+      const p = a.payload || {};
+      if (a.action === 'create_calendar_event') return `Creare l'appuntamento del ${new Date(p.inizio).toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })} e avvisare il cliente`;
+      if (a.action === 'reply') return `Inviare questa risposta: «${String(p.bozza || '').slice(0, 300)}»`;
+      return `Azione: ${a.action}`;
+    };
+    const approvazioniHtml = approvazioni.length > 0
+      ? `<div class="alert-attenzione" style="display:block;">
+          <div style="font-weight:700;margin-bottom:8px;">${icon('alert', { size: 17 })} L'assistente chiede la tua approvazione (${approvazioni.length})</div>
+          ${approvazioni.map((a) => `<div style="padding:8px 0;border-top:1px solid #fde68a;">
+            <div style="font-size:13px;">${escapeHtml(descriviApprovazione(a))}</div>
+            <div style="font-size:12px;color:#6b7280;margin:2px 0 6px;">Cliente ${escapeHtml(a.payload?.numero_utente || '—')}</div>
+            ${a.payload?.ultimo_errore ? `<div style="font-size:12px;color:#b91c1c;margin:0 0 6px;">Ultimo tentativo non riuscito: ${escapeHtml(a.payload.ultimo_errore)}</div>` : ''}
+            <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="approved" /><button type="submit" class="btn-stato">Approva ed esegui</button></form>
+            <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="rejected" /><button type="submit" class="btn-stato">Rifiuta</button></form>
+          </div>`).join('')}
+        </div>`
+      : '';
+    const esitoHtml = esitoDecisione ? `<div class="alert-attenzione ok">${icon('check', { size: 17 })}<span>${escapeHtml(esitoDecisione)}</span></div>` : '';
+
+    const ins = calcolaInsight(lista, { valoreMedio: valoreMedioCliente });
+    const insightHtml = ins.conversazioni === 0
+      ? ''
+      : `<div class="card" style="margin-bottom:20px;">
+          <h2>${icon('check', { size: 15 })} Cosa ha fatto l'assistente — ultimi ${ins.giorni} giorni</h2>
+          <p class="desc">Calcolato sulle conversazioni reali. Non include stime di ore risparmiate o fatturato oltre al valore medio che hai impostato.</p>
+          <div class="analytics-grid">
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.conversazioni}</div><div class="analytics-label">conversazioni</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.appuntamenti_confermati}</div><div class="analytics-label">appuntamenti confermati</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.urgenze}</div><div class="analytics-label">urgenze</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.passate_allo_staff}</div><div class="analytics-label">passate allo staff</div></div>
+            <div class="analytics-num-blocco"><div class="analytics-num">${ins.lead_da_recuperare}</div><div class="analytics-label">lead senza esito da oltre 24 ore</div></div>
+            ${ins.valore_appuntamenti != null ? `<div class="analytics-num-blocco"><div class="analytics-num">€${ins.valore_appuntamenti.toLocaleString('it-IT')}</div><div class="analytics-label">valore appuntamenti (stima da valore medio)</div></div>` : ''}
+          </div>
+          ${ins.per_intent.length ? `<p style="font-size:13px;margin:14px 0 4px;"><strong>Di cosa parlano i clienti:</strong> ${ins.per_intent.map(([i, n]) => `${escapeHtml(i.replace(/_/g, ' '))} (${n})`).join(', ')}</p>` : ''}
+          ${ins.motivi_handoff.length ? `<p style="font-size:13px;margin:4px 0;"><strong>Perché passa a una persona:</strong> ${ins.motivi_handoff.map(([m, n]) => `${escapeHtml(m)} (${n})`).join(', ')}</p>` : ''}
+          ${ins.domande_non_capite.length ? `<p style="font-size:13px;margin:10px 0 2px;"><strong>Domande che il bot non ha capito</strong> — valuta di aggiungerle alla knowledge base:</p><ul style="margin:0;padding-left:18px;font-size:13px;color:#4b5563;">${ins.domande_non_capite.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}</ul>` : ''}
+        </div>`;
+
     // ===== Servizi e personale (migrations/008) =====
     let servizi = [];
     let personale = [];
@@ -199,6 +254,7 @@ export default async function handler(req, res) {
 
     const statoBadge = {
       urgente: { colore: '#dc2626', bg: '#fef2f2', label: 'Urgente', icona: 'alert' },
+      handoff: { colore: '#7c3aed', bg: '#f5f3ff', label: 'Da richiamare', icona: 'alert' },
       completata: { colore: '#16a34a', bg: '#f0fdf4', label: 'Completata', icona: 'check' },
       in_corso: { colore: '#d97706', bg: '#fffbeb', label: 'In corso', icona: 'clock' },
     };
@@ -423,6 +479,7 @@ export default async function handler(req, res) {
 
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
+        ${esitoHtml}${approvazioniHtml}${insightHtml}
         <div class="main-titolo">${saluto()}, ${escapeHtml(nomeAttivita)}</div>
         <p class="main-sub">La tua attività, sempre sotto controllo.</p>
 
@@ -474,6 +531,7 @@ export default async function handler(req, res) {
           <div class="conv-filtri">
             <button class="conv-filtro attivo" data-filtro="tutte">Tutte (${contaTotali})</button>
             <button class="conv-filtro" data-filtro="urgente">Urgenti (${contaUrgenti})</button>
+            ${contaHandoff > 0 ? `<button class="conv-filtro" data-filtro="handoff">Da richiamare (${contaHandoff})</button>` : ''}
             <button class="conv-filtro" data-filtro="in_corso">In corso (${contaInCorso})</button>
             <button class="conv-filtro" data-filtro="completata">Completate (${contaCompletate})</button>
           </div>
