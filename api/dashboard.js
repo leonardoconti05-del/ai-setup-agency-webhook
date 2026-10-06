@@ -26,6 +26,7 @@ import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
 import { icon } from '../lib/icons.js';
 import { elencoLacune, risolviLacuna } from '../lib/lacune.js';
+import { costoAI } from '../lib/costo-ai.js';
 import { calcolaInsight } from '../lib/insights.js';
 import { decidiApprovazione, elencoApprovazioniPending } from '../lib/governance/esegui-approvata.js';
 
@@ -234,6 +235,7 @@ export default async function handler(req, res) {
         </div>`;
 
     const ins = calcolaInsight(lista, { valoreMedio: valoreMedioCliente });
+    const costoAi = await costoAI({ SUPABASE_URL, headers }, cliente_id);
     const insightHtml = ins.conversazioni === 0
       ? ''
       : `<div class="card" style="margin-bottom:20px;">
@@ -247,6 +249,7 @@ export default async function handler(req, res) {
             <div class="analytics-num-blocco"><div class="analytics-num">${ins.lead_da_recuperare}</div><div class="analytics-label">lead senza esito da oltre 24 ore</div></div>
             ${ins.valore_appuntamenti != null ? `<div class="analytics-num-blocco"><div class="analytics-num">€${ins.valore_appuntamenti.toLocaleString('it-IT')}</div><div class="analytics-label">valore appuntamenti (stima da valore medio)</div></div>` : ''}
           </div>
+          ${costoAi && costoAi.risposte > 0 ? `<p style="font-size:13px;margin:14px 0 4px;"><strong>Costo dell'assistente (ultimi ${ins.giorni} giorni):</strong> circa $${costoAi.costo_usd.toFixed(2)} per ${costoAi.risposte} risposte (stima dai token usati)${ins.valore_appuntamenti != null ? `, a fronte di una stima di €${ins.valore_appuntamenti.toLocaleString('it-IT')} in appuntamenti` : ''}.</p>` : ''}
           ${ins.per_intent.length ? `<p style="font-size:13px;margin:14px 0 4px;"><strong>Di cosa parlano i clienti:</strong> ${ins.per_intent.map(([i, n]) => `${escapeHtml(i.replace(/_/g, ' '))} (${n})`).join(', ')}</p>` : ''}
           ${ins.motivi_handoff.length ? `<p style="font-size:13px;margin:4px 0;"><strong>Perché passa a una persona:</strong> ${ins.motivi_handoff.map(([m, n]) => `${escapeHtml(m)} (${n})`).join(', ')}</p>` : ''}
           ${ins.domande_non_capite.length ? `<p style="font-size:13px;margin:10px 0 2px;"><strong>Domande che il bot non ha capito</strong> — valuta di aggiungerle alla knowledge base:</p><ul style="margin:0;padding-left:18px;font-size:13px;color:#4b5563;">${ins.domande_non_capite.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}</ul>` : ''}
