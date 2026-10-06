@@ -378,6 +378,8 @@ export default async function handler(req, res) {
     // pack in produzione (sector_profiles). Altrimenti (o se il caricamento
     // fallisce) il percorso è identico a quello precedente.
     const packCaricato = await caricaPackProduzione(SUPABASE_URL, headers, config.settore);
+    // Diagnostica: quale settore vede il webhook e se il motore è attivo per questo messaggio.
+    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'pack', dettaglio: { settore: config.settore || null, motore_attivo: !!packCaricato, pack_version: packCaricato?.version ?? null } });
     const campiConsentiti = new Set([...campiRichiesti, 'urgente', ...(packCaricato ? packCaricato.pack.entities.map((e) => e.id) : [])]);
 
     // Governance (registro azioni, livelli di autonomia): solo per i tenant che usano il
