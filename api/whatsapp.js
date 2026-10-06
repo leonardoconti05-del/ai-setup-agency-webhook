@@ -7,7 +7,7 @@ import { eseguiMotore } from '../lib/engine/orchestratore.js';
 import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../lib/governance/ledger.js';
 import { caricaPolicy, valutaAzione, POLICY_VERSION } from '../lib/governance/policy.js';
 import { richiediApprovazione } from '../lib/governance/approvazioni.js';
-import { puoProporreSlot } from '../lib/prenotazione.js';
+import { puoProporreSlot, rispostaAppuntamentoEsistente } from '../lib/prenotazione.js';
 import { statoConDatiNoti } from '../lib/engine/state.js';
 
 function escapeXml(text) {
@@ -705,6 +705,15 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Errore ricerca slot calendario:', e);
         await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar', stato: 'errore', dettaglio: { errore: String(e.message || e) } });
+      }
+    }
+
+    // Appuntamento già confermato e futuro: risposta chiara scritta da noi (solo percorso motore).
+    if (esitoMotore && proponiSlot && !urgente && !esitoMotore.handoff) {
+      const gia = rispostaAppuntamentoEsistente({ fase: datiCombinati._fase, appuntamentoInizio: datiCombinati._appuntamento_inizio, nome: esitoMotore.entities?.[packCaricato?.pack?.identity?.entita_nome] || datiCombinati[packCaricato?.pack?.identity?.entita_nome] });
+      if (gia) {
+        reply = gia;
+        history[history.length - 1] = { role: 'assistant', content: reply };
       }
     }
 
