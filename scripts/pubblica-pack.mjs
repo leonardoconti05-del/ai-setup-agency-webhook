@@ -5,6 +5,9 @@
 //
 //   node scripts/pubblica-pack.mjs dentista            -> migrations/seed/<settore>_v<N>.sql
 //   node scripts/pubblica-pack.mjs dentista --promuovi -> stampa anche lo SQL di promozione
+//   node scripts/pubblica-pack.mjs dentista --leggero  -> in più, file <settore>_v<N>_LEGGERO_<k>.sql
+//        senza gli scenari di test (non servono a runtime) e con le parti grandi del pack in file
+//        separati (≤ ~150 KB ciascuno), da eseguire IN ORDINE nell'SQL Editor.
 //
 // Il seed inserisce il profilo in stato 'test' e registra l'esito della
 // valutazione (sector_eval_runs). La PROMOZIONE a 'production' è un file
@@ -67,4 +70,36 @@ update sector_profiles set status = 'production' where settore = ${lit(settore)}
 update sector_faq set status = 'production' where settore = ${lit(settore)} and version = ${VERSIONE};
 `;
 fs.writeFileSync(path.join(out, `${settore}_v${VERSIONE}_PROMUOVI.sql`), promo);
+
+if (process.argv.includes('--leggero')) {
+  const SOGLIA = 100_000;
+  const chiaviGrandi = Object.keys(pack).filter((k) => JSON.stringify(pack[k]).length > SOGLIA);
+  const piccolo = Object.fromEntries(Object.entries(pack).filter(([k]) => !chiaviGrandi.includes(k)));
+  const faqRighe = righe.filter((r) => r.startsWith('insert into sector_faq') || r.startsWith('delete from sector_faq'));
+  const evRiga = righe.filter((r) => r.startsWith('insert into sector_eval_runs') || r.startsWith('select id, settore') || r.startsWith('from sector_profiles'));
+  // l'insert di eval_runs occupa 3 righe consecutive (insert / select / from): le ricostruiamo intere.
+  const iEv = righe.findIndex((r) => r.startsWith('insert into sector_eval_runs'));
+  const evBlocco = righe.slice(iEv, iEv + 3);
+  void evRiga;
+  const parti = [];
+  const intest = (k, tot, nota) => `-- Seed LEGGERO "${settore}" v${VERSIONE} — parte ${k}/${tot}${nota ? ' — ' + nota : ''}. Eseguire in ordine. Idempotente.`;
+  const base = [
+    'begin;',
+    `insert into sector_profiles (settore, version, status, pack, changelog)\nvalues (${lit(settore)}, ${VERSIONE}, 'test', ${dq(piccolo)}::jsonb, ${lit(CHANGELOG || '')})\non conflict (settore, version) do update set pack = excluded.pack, changelog = excluded.changelog\nwhere sector_profiles.status in ('draft', 'test');`,
+    ...faqRighe,
+  ];
+  parti.push({ nota: 'profilo base e FAQ', righe: base });
+  for (const k of chiaviGrandi) {
+    parti.push({ nota: `sezione "${k}"`, righe: ['begin;', `update sector_profiles set pack = pack || jsonb_build_object(${lit(k)}, ${dq(pack[k])}::jsonb) where settore = ${lit(settore)} and version = ${VERSIONE} and status in ('draft', 'test');`] });
+  }
+  const ultima = parti[parti.length - 1];
+  ultima.righe.push(...evBlocco);
+  ultima.nota += ' e valutazione';
+  const tot = parti.length;
+  parti.forEach((pt, i) => {
+    const f = path.join(out, `${settore}_v${VERSIONE}_LEGGERO_${i + 1}.sql`);
+    fs.writeFileSync(f, [intest(i + 1, tot, pt.nota), ...pt.righe, 'commit;'].join('\n') + '\n');
+    console.log(`  ${path.basename(f)} (${Math.round(fs.statSync(f).size / 1024)} KB)`);
+  });
+}
 console.log(`${file}\n  scenari ${ev.passati}/${ev.totale}, gate ${ev.gate_passed ? 'superato' : 'NON superato'}, ${faq.length} FAQ`);

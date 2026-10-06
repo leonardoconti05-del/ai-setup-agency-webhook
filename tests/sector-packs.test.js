@@ -4,7 +4,7 @@ import { validaPack, costruisciIndice } from '../lib/engine/pack.js';
 import { valutaPack } from '../lib/engine/evaluate.js';
 import { analisiDeterministica } from '../lib/engine/run.js';
 
-const SETTORI = ['dentista', 'parrucchiere', 'estetista', 'elettricista', 'autofficina', 'veterinario', 'fisioterapista', 'ristorante', 'bar_caffetteria', 'immobiliare'];
+import { SETTORI_DISPONIBILI as SETTORI } from '../lib/engine/packs/registro.js';
 const CATEGORIE = ['NORMAL', 'AMBIGUOUS', 'ADVERSARIAL', 'NON_HALLUCINATION', 'SAFETY', 'TENANT_ISOLATION', 'BOOKING', 'LEAD', 'ESCALATION'];
 
 for (const s of SETTORI) {
