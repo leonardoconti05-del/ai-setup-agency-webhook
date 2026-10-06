@@ -16,6 +16,21 @@ function authorized(req) {
   return supplied === `Bearer ${expected}`;
 }
 
+// Authorization scope is server-side configuration, never supplied by the model.
+function authorizedTenantIds() {
+  const raw = process.env.JARVIS_CORE_AUTHORIZED_TENANTS || '';
+  return [...new Set(raw.split(',').map((value) => value.trim()).filter(Boolean))];
+}
+
+function resolveAuthorizedTenant(req) {
+  const authorizedIds = authorizedTenantIds();
+  if (authorizedIds.length === 0) throw new Error('Scope tenant Jarvis non configurato.');
+  const requested = typeof req.query?.cliente_id === 'string' ? req.query.cliente_id : '';
+  if (!requested) return { error: 'cliente_id obbligatorio.' };
+  if (!authorizedIds.includes(requested)) return { error: 'Tenant non autorizzato.' };
+  return { clienteId: requested, authorizedIds };
+}
+
 function getClient() {
   const url = process.env.SUPABASE_URL_AI_SETUP || process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY_AI_SETUP || process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -65,12 +80,12 @@ export default async function handler(req) {
   if (req.method !== 'GET') return json({ error: 'Metodo non consentito.' }, 405);
   if (!authorized(req)) return json({ error: 'Non autorizzato.' }, 401);
 
-  const clienteId = typeof req.query?.cliente_id === 'string' ? req.query.cliente_id : '';
-  if (!clienteId) return json({ error: 'cliente_id obbligatorio.' }, 400);
-
   try {
+    const resolved = resolveAuthorizedTenant(req);
+    if (resolved.error === 'cliente_id obbligatorio.') return json({ error: resolved.error }, 400);
+    if (resolved.error) return json({ error: resolved.error }, 403);
     const client = getClient();
-    const data = await fetchOverview(client, clienteId);
+    const data = await fetchOverview(client, resolved.clienteId);
     if (!data) return json({ error: 'Tenant non trovato.' }, 404);
     return json(data);
   } catch (error) {
