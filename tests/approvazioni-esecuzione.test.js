@@ -64,10 +64,21 @@ test('la decisione filtra per cliente_id e stato pending nella query', async () 
 });
 
 test('errore di esecuzione: esito onesto, non "fatto"', async () => {
-  const { c } = ctx({ richiesta: cal });
+  const { c, chiamate } = ctx({ richiesta: cal });
   const led = [];
   const r = await decidiApprovazione(c, { cliente_id: 'c1', id: 'a1', decisione: 'approved' }, { creaEvento: async () => { throw new Error('boom'); }, inviaWhatsApp: async () => {}, registra: async (_c, e) => led.push(e) });
   assert.equal(r.eseguita, false); assert.match(r.esito, /boom/); assert.equal(led[0].action, 'create_calendar_event_failed');
+  const riapertura = chiamate.filter((x) => x.method === 'PATCH' && x.u.includes('/approval_requests')).pop();
+  assert.match(riapertura.u, /stato=eq\.approved/);
+  const b = JSON.parse(riapertura.body);
+  assert.equal(b.stato, 'pending'); assert.match(b.payload.ultimo_errore, /boom/);
+  assert.equal(b.payload.numero_utente, '+39333', 'il payload originale resta');
+});
+
+test('esecuzione riuscita: la richiesta NON viene riaperta', async () => {
+  const { c, chiamate } = ctx({ richiesta: rep });
+  await decidiApprovazione(c, { cliente_id: 'c1', id: 'a2', decisione: 'approved' }, { inviaWhatsApp: async () => {}, registra: async () => {} });
+  assert.equal(chiamate.filter((x) => x.method === 'PATCH' && x.u.includes('/approval_requests')).length, 1);
 });
 
 test('azione sconosciuta: approvata ma non eseguita', async () => {

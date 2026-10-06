@@ -64,7 +64,7 @@ Trova il tuo `cliente_id`: `select id, nome_attivita from clienti;`
 3. **Approva ed esegui** — clicca. Atteso: evento su Google Calendar, WhatsApp di conferma al cliente, messaggio di esito in dashboard, riga `create_calendar_event_executed` nel ledger.
 4. **Rifiuto** — ripeti la prenotazione e clicca "Rifiuta". Atteso: nessun evento, riga `create_calendar_event_rejected`.
 5. **Errore reale** — ripeti, e PRIMA di cliccare "Approva" cambia il calendario con uno inesistente: `update configurazioni_cliente set google_calendar_id='inesistente@group.calendar.google.com' where cliente_id='<id>';` Atteso: dashboard "Approvata ma non eseguita: …", riga `…_failed` nel ledger, nessun messaggio di conferma al cliente. Poi RIPRISTINA il vero `google_calendar_id`.
-   Limite noto: la richiesta fallita non è ripetibile (è già "approved"): serve una nuova richiesta.
+   Dopo l'errore la richiesta torna nella card con "Ultimo tentativo non riuscito": ripristina il calendario giusto e clicca di nuovo "Approva ed esegui" (deve riuscire), oppure "Rifiuta".
 
 A fine test ripristina la policy se vuoi l'esecuzione automatica: `delete from tenant_action_policy where cliente_id='<id>';`
 Verifica l'integrità del registro: `node scripts/verifica-ledger.mjs <cliente_id>` (richiede terminale: in alternativa guarda che le righe siano in ordine e non ci siano errori nei log di Vercel).

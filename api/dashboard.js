@@ -209,6 +209,7 @@ export default async function handler(req, res) {
           ${approvazioni.map((a) => `<div style="padding:8px 0;border-top:1px solid #fde68a;">
             <div style="font-size:13px;">${escapeHtml(descriviApprovazione(a))}</div>
             <div style="font-size:12px;color:#6b7280;margin:2px 0 6px;">Cliente ${escapeHtml(a.payload?.numero_utente || '—')}</div>
+            ${a.payload?.ultimo_errore ? `<div style="font-size:12px;color:#b91c1c;margin:0 0 6px;">Ultimo tentativo non riuscito: ${escapeHtml(a.payload.ultimo_errore)}</div>` : ''}
             <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="approved" /><button type="submit" class="btn-stato">Approva ed esegui</button></form>
             <form method="POST" action="/api/dashboard" style="display:inline;"><input type="hidden" name="approvazione_id" value="${escapeHtml(a.id)}" /><input type="hidden" name="decisione" value="rejected" /><button type="submit" class="btn-stato">Rifiuta</button></form>
           </div>`).join('')}
