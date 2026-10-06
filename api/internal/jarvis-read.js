@@ -17,8 +17,8 @@ function authorized(req) {
 }
 
 function getClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SUPABASE_URL_AI_SETUP || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY_AI_SETUP || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Supabase Core non configurato.');
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
