@@ -25,6 +25,7 @@
 import { leggiCookieSessione, verificaSessione } from '../lib/session.js';
 import { etichetteSettore, nomeSettore } from '../lib/settori.js';
 import { icon } from '../lib/icons.js';
+import { elencoLacune, risolviLacuna } from '../lib/lacune.js';
 import { calcolaInsight } from '../lib/insights.js';
 import { decidiApprovazione, elencoApprovazioniPending } from '../lib/governance/esegui-approvata.js';
 
@@ -103,6 +104,11 @@ export default async function handler(req, res) {
         );
         const msg = esito.ok ? (esito.eseguita === false ? `Approvata ma non eseguita: ${esito.esito}` : esito.esito) : esito.motivo;
         res.writeHead(302, { Location: '/api/dashboard?esito=' + encodeURIComponent(msg || '') });
+        return res.end();
+      }
+      if (req.body?.lacuna_id) {
+        await risolviLacuna({ SUPABASE_URL, headers }, { cliente_id, id: String(req.body.lacuna_id) });
+        res.writeHead(302, { Location: '/api/dashboard?esito=' + encodeURIComponent('Domanda segnata come risolta') });
         return res.end();
       }
       const { numero_utente, nuovo_stato } = req.body || {};
@@ -216,6 +222,16 @@ export default async function handler(req, res) {
         </div>`
       : '';
     const esitoHtml = esitoDecisione ? `<div class="alert-attenzione ok">${icon('check', { size: 17 })}<span>${escapeHtml(esitoDecisione)}</span></div>` : '';
+
+    const lacune = await elencoLacune({ SUPABASE_URL, headers }, cliente_id);
+    const lacuneHtml = lacune.length === 0 ? '' : `<div class="card" style="margin-bottom:20px;">
+          <h2>${icon('alert', { size: 15 })} Domande a cui l'assistente non ha saputo rispondere</h2>
+          <p class="desc">Le più frequenti per prime. Aggiungi la risposta alla knowledge base o ai servizi, poi segnala come risolta.</p>
+          ${lacune.map((l) => `<div style="padding:8px 0;border-top:1px solid #e5e7eb;display:flex;gap:10px;align-items:center;justify-content:space-between;">
+            <div style="font-size:13px;">«${escapeHtml(l.domanda)}» <span style="color:#6b7280;">— ${l.volte} ${l.volte === 1 ? 'volta' : 'volte'}${l.tipo === 'non_compreso' ? ', non capita' : ''}</span></div>
+            <form method="POST" action="/api/dashboard"><input type="hidden" name="lacuna_id" value="${escapeHtml(l.id)}" /><button type="submit" class="btn-stato">Risolta</button></form>
+          </div>`).join('')}
+        </div>`;
 
     const ins = calcolaInsight(lista, { valoreMedio: valoreMedioCliente });
     const insightHtml = ins.conversazioni === 0
@@ -479,7 +495,7 @@ export default async function handler(req, res) {
 
     <div class="main">
       <div class="tab-pannello attivo" data-pannello="panoramica">
-        ${esitoHtml}${approvazioniHtml}${insightHtml}
+        ${esitoHtml}${approvazioniHtml}${insightHtml}${lacuneHtml}
         <div class="main-titolo">${saluto()}, ${escapeHtml(nomeAttivita)}</div>
         <p class="main-sub">La tua attività, sempre sotto controllo.</p>
 
