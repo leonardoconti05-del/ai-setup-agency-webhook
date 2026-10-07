@@ -8,6 +8,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "test:sector-packs": "node scripts/valuta-tutti-pack.mjs"
   }
 }
