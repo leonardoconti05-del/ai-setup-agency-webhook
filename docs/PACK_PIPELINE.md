@@ -39,3 +39,12 @@ Prova end-to-end che un pack in **TEST** funziona con lo stesso percorso del run
 - Garanzie: zero scritture (ogni richiesta non-GET è bloccata e fa fallire la prova); stato del profilo riletto prima e dopo; l'unica traccia è una riga in `sector_pack_audit` (evento `verifica`, solo conteggi).
 - Il webhook **non** importa il loader dell'harness (c'è un test): i clienti vedono solo pack in `production`.
 - **Limiti dichiarati:** il modello è simulato (si verifica l'integrazione, non la qualità delle risposte LLM) e la riga `tenant_action_policy` del tenant di prova è simulata (autonomia 5). Superare l'harness non sostituisce né il Pack Gate né l'holdout.
+
+## Promozione verificata e in serie (`promuovi_verificato`)
+
+Per ridurre i click senza ridurre i controlli. Per **un** settore (azione `promuovi_verificato`): harness runtime → (se superato) promozione con tutti i controlli già previsti (stesso contenuto del codice, validazione, compatibilità, gate, metadata holdout, trigger del database) → audit.
+
+- **Settori regolamentati rifiutati sempre** (`SETTORI_REGOLAMENTATI` in `pack-pipeline.js`): serve una revisione professionale. Restano promuovibili solo con il pulsante manuale "Promuovi ad ACTIVE", cioè con una decisione esplicita.
+- **Serie:** il campo "Promuovi in serie" della pagina admin prende fino a 8 settori scritti da te, chiede conferma e li esegue **uno alla volta, nell'ordine**, fermandosi al primo problema (i successivi non vengono toccati). Nessuna promozione parte da sola e nessun settore non elencato viene toccato.
+- **Auditabile:** ogni rifiuto e ogni promozione lascia una riga in `sector_pack_audit` (con la fase in cui si è fermato).
+- Il primo giro dell'holdout resta il dato ufficiale di generalizzazione e viene registrato a ogni promozione; superare harness e gate non lo sostituisce.
