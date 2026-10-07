@@ -755,7 +755,7 @@ export default async function handler(req, res) {
     if (esitoMotore) {
       await ledger({
         actor: 'agent:whatsapp', action: esitoMotore.handoff ? (esitoMotore.azione.action === 'emergency_escalation' ? 'emergency_escalation' : 'handoff_created') : 'reply_sent',
-        autonomy_level: polReply?.livello ?? 5, approval: polReply && !polReply.esegue ? 'pending' : 'not_required',
+        autonomy_level: polReply?.autonomy_level ?? 5, approval: polReply?.verdict === 'REQUIRE_APPROVAL' ? 'pending' : 'not_required',
         reason: esitoMotore.azione.reason, sources: esitoMotore.fonti, model: esitoMotore.telemetria.model, prompt_version: esitoMotore.prompt_version,
         input_hash: hashTesto(messaggio), output_excerpt: reply,
         result: esitoMotore.telemetria.origine_risposta === 'llm' || esitoMotore.telemetria.origine_risposta === 'template' ? 'ok' : esitoMotore.telemetria.origine_risposta,
