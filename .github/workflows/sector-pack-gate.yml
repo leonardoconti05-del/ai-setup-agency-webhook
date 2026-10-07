@@ -1,0 +1,24 @@
+name: sector-pack-gate
+
+on:
+  pull_request:
+    paths:
+      - 'lib/engine/packs/**'
+      - 'lib/engine/pack.js'
+      - 'lib/engine/evaluate.js'
+      - 'scripts/valuta-tutti-pack.mjs'
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  sector-packs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:sector-packs
