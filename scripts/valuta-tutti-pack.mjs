@@ -15,8 +15,9 @@ const sectors = files
   .map((name) => basename(name, '.js'))
   .sort();
 
+const requested = process.argv[2] ? [process.argv[2]] : sectors;
 const results = [];
-for (const settore of sectors) {
+for (const settore of requested) {
   try {
     const { pack, faq } = await import('../lib/engine/packs/' + settore + '.js');
     const { scenari } = await import('../lib/engine/packs/' + settore + '.scenari.js');
