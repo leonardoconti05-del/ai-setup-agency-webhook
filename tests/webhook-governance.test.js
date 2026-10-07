@@ -22,6 +22,14 @@ function installa({ conPack = true, policy = [], ledgerAssente = false } = {}) {
     if (u.includes('/configurazioni_cliente')) return json([{ cliente_id: 'c1', settore: 'dentista', numero_whatsapp: 'whatsapp:+1', attivo: true, clienti: { nome_attivita: 'Studio X' }, campi_da_raccogliere: [{ campo: 'nome_paziente', domanda: 'Nome?' }], google_calendar_id: null, telegram_chat_id: null }]);
     if (u.includes('/sector_profiles')) return json(conPack ? [{ id: 'p', version: 3, pack }] : []);
     if (u.includes('/sector_faq')) return json(faq.map((f) => ({ ...f, condizioni: {} })));
+    if (u.includes('/action_registry')) {
+      const requested = new URL(u).searchParams.get('action_id')?.replace('eq.', '');
+      const actions = {
+        reply: { action_id: 'reply', name: 'Reply', risk_level: 'low', required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', active: true, metadata: { agent: 'whatsapp' } },
+        handoff: { action_id: 'handoff', name: 'Handoff', risk_level: 'medium', required_autonomy: 3, approval_required: false, executor: 'whatsapp.handoff', executor_version: '1', active: true, metadata: { agent: 'whatsapp' } },
+      };
+      return json(requested && actions[requested] ? [actions[requested]] : []);
+    }
     if (u.includes('/tenant_action_policy')) return json(policy);
     if (u.includes('/approval_requests')) { st.approvazioni.push(JSON.parse(opts.body)); return json([{ id: 'ap1' }], 201); }
     if (u.includes('/ai_action_ledger')) {
