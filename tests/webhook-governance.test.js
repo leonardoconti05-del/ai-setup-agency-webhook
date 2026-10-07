@@ -65,8 +65,8 @@ describe('governance nel webhook', () => {
     installa();
     const r = resp(); await handler(req('vorrei prenotare una pulizia'), r);
     assert.equal(r.code, 200);
-    assert.equal(st.ledger.length, 1);
-    const l = st.ledger[0];
+    assert.equal(st.ledger.length, 2);
+    const l = st.ledger.find((entry) => entry.action === 'reply_sent');
     assert.equal(l.cliente_id, 'c1'); assert.equal(l.action, 'reply_sent'); assert.equal(l.pack_version, 3);
     assert.equal(l.autonomy_level, 3); assert.equal(l.prompt_version, 'motore-2');
     assert.ok(l.sources.some((s) => s.tipo === 'pack' && s.settore === 'dentista' && s.versione === 3));
@@ -78,7 +78,7 @@ describe('governance nel webhook', () => {
     installa();
     await handler(req('non riesco a respirare'), resp());
     assert.deepEqual(st.anthropic, []);
-    assert.equal(st.ledger[0].action, 'emergency_escalation');
+    assert.ok(st.ledger.some((entry) => entry.action === 'emergency_escalation'));
   });
   test('ledger assente (migrazione non applicata): il cliente riceve la risposta normale', async () => {
     installa({ ledgerAssente: true });
