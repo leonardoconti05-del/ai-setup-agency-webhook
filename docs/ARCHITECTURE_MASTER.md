@@ -158,3 +158,24 @@ The ecosystem is considered integrated when:
 - Actions are policy-gated and auditable.
 - Dashboard exposes business operations without leaking cross-tenant data.
 - Notion remains agency back-office, not a second operational database.
+
+## Governance Core — Action Registry + Action Gateway
+
+The execution boundary is centralized in `lib/governance/action-gateway.js`.
+
+Flow:
+
+`AI intent → server-derived TenantContext → agent registry → action registry → tenant policy → autonomy → approval → registered executor → action ledger`
+
+Rules:
+1. Unknown or inactive agents are denied.
+2. Unknown or inactive actions are denied.
+3. Registry metadata binds an action to its allowed agent.
+4. A payload cannot override `cliente_id` from the trusted tenant context.
+5. Tenant policy can restrict an action but cannot lower the registry safety boundary.
+6. Approval is created before execution when required.
+7. Execution requires the executor identifier declared by the registry.
+8. Consequential outcomes are recorded in the existing `ai_action_ledger`.
+9. `action_registry` is backend-controlled and is not exposed to anonymous/authenticated clients.
+
+The registry currently contains only actions already represented by the running product: `reply`, `handoff`, `create_calendar_event`, `notify_staff`, and `send_followup`. New actions require a real executor and regression tests before registration.
