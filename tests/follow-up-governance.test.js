@@ -33,6 +33,7 @@ beforeEach(() => svuotaCachePolicy());
 afterEach(() => { globalThis.fetch = realFetch; });
 
 const chiama = async () => {
+  svuotaCachePolicy();
   let out;
   const res = { status(c) { this.code = c; return this; }, json(v) { out = v; return this; } };
   await handler({ headers: { authorization: 'Bearer segreto' } }, res);
