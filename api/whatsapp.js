@@ -10,6 +10,8 @@ import { richiediApprovazione } from '../lib/governance/approvazioni.js';
 import { registraLacuna, tipoLacuna } from '../lib/lacune.js';
 import { puoProporreSlot, rispostaAppuntamentoEsistente } from '../lib/prenotazione.js';
 import { statoConDatiNoti } from '../lib/engine/state.js';
+import { createTenantContext } from '../lib/core/contracts.js';
+import { authorizeAction } from '../lib/governance/action-gateway.js';
 
 function escapeXml(text) {
   return String(text)
@@ -388,6 +390,9 @@ export default async function handler(req, res) {
     // motore. Tutto best-effort e con default = comportamento storico: se le tabelle non
     // esistono, nulla cambia e nessun errore arriva al cliente.
     const ctxGov = { SUPABASE_URL, headers };
+    const tenantContext = packCaricato
+      ? Object.freeze({ ...createTenantContext({ clienteId: cliente_id, actor: 'agent:whatsapp', agent: 'whatsapp', requestId, authorizationSource: 'twilio-webhook' }), server_derived: true })
+      : null;
     const policyRighe = packCaricato ? await caricaPolicy(ctxGov, cliente_id) : [];
     const ledger = (entry) => (packCaricato
       ? registraLedger(ctxGov, { cliente_id, request_id: requestId, subject_ref: riferimentoSoggetto(cliente_id, telefono), policy_version: POLICY_VERSION, pack_version: packCaricato.version, ...entry })
@@ -576,11 +581,33 @@ export default async function handler(req, res) {
 
     let polReply = null;
     if (esitoMotore) {
-      polReply = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: esitoMotore.handoff ? 'handoff' : 'reply' });
+      const actionId = esitoMotore.azione?.action === 'emergency_escalation' ? 'emergency_escalation' : esitoMotore.handoff ? 'handoff' : 'reply';
+      const payloadAzione = {
+        cliente_id,
+        numero_utente: telefono,
+        bozza: esitoMotore.reply,
+        intent: esitoMotore.stato?.intent || null,
+      };
+      polReply = await authorizeAction({
+        tenantContext,
+        action: actionId,
+        payload: payloadAzione,
+        reason: esitoMotore.handoff ? 'handoff_vertical_engine' : 'reply_vertical_engine',
+        sources: [],
+        SUPABASE_URL,
+        headers,
+      });
       reply = esitoMotore.reply;
-      if (!polReply.esegue) {
-        // Il titolare ha limitato l'autonomia: la bozza resta in approvazione e al cliente va un messaggio neutro.
-        await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'reply', payload: { numero_utente: telefono, bozza: reply, intent: esitoMotore.stato.intent } });
+
+      if (polReply.verdict === 'REQUIRE_APPROVAL') {
+        await richiediApprovazione(ctxGov, {
+          cliente_id,
+          agent: 'whatsapp',
+          action: actionId,
+          payload: payloadAzione,
+        });
+        reply = packCaricato.pack.escalation_rules?.messaggio_handoff || 'Passo la sua richiesta a una persona del team, che la ricontatterà.';
+      } else if (polReply.verdict !== 'ALLOW') {
         reply = packCaricato.pack.escalation_rules?.messaggio_handoff || 'Passo la sua richiesta a una persona del team, che la ricontatterà.';
       }
       history.push({ role: 'assistant', content: reply });
@@ -728,7 +755,7 @@ export default async function handler(req, res) {
     if (esitoMotore) {
       await ledger({
         actor: 'agent:whatsapp', action: esitoMotore.handoff ? (esitoMotore.azione.action === 'emergency_escalation' ? 'emergency_escalation' : 'handoff_created') : 'reply_sent',
-        autonomy_level: polReply?.livello ?? 5, approval: polReply && !polReply.esegue ? 'pending' : 'not_required',
+        autonomy_level: polReply?.autonomy_level ?? 5, approval: polReply?.verdict === 'REQUIRE_APPROVAL' ? 'pending' : 'not_required',
         reason: esitoMotore.azione.reason, sources: esitoMotore.fonti, model: esitoMotore.telemetria.model, prompt_version: esitoMotore.prompt_version,
         input_hash: hashTesto(messaggio), output_excerpt: reply,
         result: esitoMotore.telemetria.origine_risposta === 'llm' || esitoMotore.telemetria.origine_risposta === 'template' ? 'ok' : esitoMotore.telemetria.origine_risposta,
