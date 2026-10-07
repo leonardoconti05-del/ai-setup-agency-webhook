@@ -1,7 +1,7 @@
 import { getGoogleAccessToken, creaEvento } from '../lib/google-calendar.js';
 import { validaFirmaTwilio } from '../lib/twilio-signature.js';
 import { creaRequestId, logEvento } from '../lib/logger.js';
-import { embedQuery } from '../lib/embeddings.js';
+import { ricercaKnowledgeBase } from '../lib/knowledge-rag.js';
 import { caricaPackProduzione } from '../lib/engine/pack.js';
 import { eseguiMotore } from '../lib/engine/orchestratore.js';
 import { registra as registraLedger, riferimentoSoggetto, hashTesto } from '../lib/governance/ledger.js';
@@ -167,41 +167,6 @@ export function buildExtractionTool(config) {
   };
 }
 
-// ===== KNOWLEDGE BASE: retrieval per similarità (RAG) =====
-// Trasforma il messaggio del cliente in un embedding e cerca i chunk più
-// simili tra i documenti caricati DI QUESTO cliente (isolamento multi-tenant
-// applicato anche qui: la funzione match_knowledge_chunks in Supabase filtra
-// sempre per cliente_id, mai una ricerca "globale"). Best-effort: se
-// l'embedding o la ricerca falliscono (es. VOYAGE_API_KEY non configurata,
-// nessun documento ancora caricato), si prosegue semplicemente senza
-// contesto aggiuntivo — la Knowledge Base è un potenziamento, non un
-// requisito per rispondere.
-async function ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, domanda) {
-  try {
-    const embedding = await embedQuery(domanda);
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/match_knowledge_chunks`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ p_cliente_id: cliente_id, p_query_embedding: embedding, p_match_count: 4 }),
-    });
-    const chunk = await res.json();
-    if (!Array.isArray(chunk) || chunk.length === 0) return '';
-    // Soglia di similarità: sotto 0.5 il chunk è probabilmente irrilevante
-    // per la domanda (coseno tra 0 e 1) — meglio non includerlo che confondere
-    // il modello con informazioni fuori tema.
-    const pertinenti = chunk.filter((c) => typeof c.similarity === 'number' && c.similarity > 0.5);
-    if (pertinenti.length === 0) return '';
-    return pertinenti.map((c) => `- ${c.contenuto}`).join('\n');
-  } catch (e) {
-    console.error('Errore ricerca knowledge base (si prosegue senza contesto aggiuntivo):', e);
-    return '';
-  }
-}
-
-// log: { SUPABASE_URL, headers, requestId, clienteId, telefono } — opzionale,
-// quando presente registra l'esito reale su event_log (fase 'telegram'), così
-// lo stato di questa integrazione nella System Health dell'agenzia riflette
-// un dato vero e non la sola presenza della variabile d'ambiente.
 async function notificaStaff(chatId, dati, telefono, nomeAttivita, urgente = false, log = null, nota = '') {
   try {
     const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -551,8 +516,29 @@ export default async function handler(req, res) {
     // ===== FLUSSO NORMALE: raccolta dati tramite Claude =====
     history.push({ role: 'user', content: messaggio });
 
-    const contestoKB = await ricercaKnowledgeBase(SUPABASE_URL, headers, cliente_id, messaggio);
-    await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'knowledge_base', dettaglio: { trovato: contestoKB.length > 0 } });
+    const retrievalKB = await ricercaKnowledgeBase({
+      SUPABASE_URL,
+      headers,
+      cliente_id,
+      domanda: messaggio,
+    });
+    const contestoKB = retrievalKB.contesto;
+    await logEvento({
+      SUPABASE_URL,
+      headers,
+      requestId,
+      clienteId: cliente_id,
+      telefono,
+      fase: 'knowledge_base',
+      dettaglio: {
+        stato: retrievalKB.status,
+        trovato: retrievalKB.hits.length > 0,
+        topSimilarity: retrievalKB.topSimilarity,
+        hitCount: retrievalKB.hits.length,
+        hits: retrievalKB.hits.map((h) => ({ id: h.id, similarity: h.similarity })),
+        errore: retrievalKB.error || null,
+      },
+    });
 
     // ===== PERCORSO MOTORE (solo settori con pack in produzione) =====
     let reply;
@@ -574,7 +560,21 @@ export default async function handler(req, res) {
         });
         await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'motore', dettaglio: esitoMotore.telemetria });
         const tl = tipoLacuna(esitoMotore.azione);
-        if (tl) await registraLacuna({ SUPABASE_URL, headers }, { cliente_id, domanda: messaggio, tipo: tl, intent: esitoMotore.stato?.intent });
+        if (tl) {
+          await registraLacuna({ SUPABASE_URL, headers }, {
+            cliente_id,
+            domanda: messaggio,
+            tipo: tl,
+            intent: esitoMotore.stato?.intent,
+          });
+        } else if (retrievalKB.status === 'ok' && retrievalKB.hits.length === 0 && esitoMotore.azione?.action === 'answer_information') {
+          await registraLacuna({ SUPABASE_URL, headers }, {
+            cliente_id,
+            domanda: messaggio,
+            tipo: 'informazione',
+            intent: esitoMotore.stato?.intent,
+          });
+        }
       } catch (e) {
         // Qualunque errore del motore: si torna al percorso precedente, il cliente non nota nulla.
         console.error('Errore motore verticale (fallback al percorso legacy):', e);

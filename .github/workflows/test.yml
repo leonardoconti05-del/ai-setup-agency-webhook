@@ -17,6 +17,7 @@ jobs:
           - tests/approvazioni-esecuzione.test.js
           - tests/campo-valido.test.js
           - tests/chunking.test.js
+          - tests/knowledge-rag.test.js
           - tests/core-contracts.test.js
           - tests/costo-ai.test.js
           - tests/follow-up-governance.test.js
