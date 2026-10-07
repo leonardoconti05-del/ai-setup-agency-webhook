@@ -12,7 +12,12 @@ on:
 
 jobs:
   sector-packs:
+    strategy:
+      fail-fast: false
+      matrix:
+        sector: [autofficina, bar_caffetteria, dentista, elettricista, estetista, fisioterapista, immobiliare, parrucchiere, ristorante, veterinario]
     runs-on: ubuntu-latest
+    name: ${{ matrix.sector }}
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 22
@@ -21,4 +26,4 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm test
-      - run: npm run test:sector-packs
+      - run: node scripts/valuta-tutti-pack.mjs ${{ matrix.sector }}
