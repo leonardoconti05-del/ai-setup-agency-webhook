@@ -9,10 +9,36 @@ on:
 
 jobs:
   node-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        test_file:
+          - tests/action-gateway.test.js
+          - tests/approvazioni-esecuzione.test.js
+          - tests/campo-valido.test.js
+          - tests/chunking.test.js
+          - tests/core-contracts.test.js
+          - tests/costo-ai.test.js
+          - tests/follow-up-governance.test.js
+          - tests/governance.test.js
+          - tests/insights.test.js
+          - tests/lacune.test.js
+          - tests/motore-integrazione.test.js
+          - tests/prenotazione.test.js
+          - tests/retention.test.js
+          - tests/richiede-dato-noto.test.js
+          - tests/sector-dentista.test.js
+          - tests/sector-packs.test.js
+          - tests/settori.test.js
+          - tests/stato-da-dati-noti.test.js
+          - tests/webhook-governance.test.js
+          - tests/webhook-handler.test.js
     runs-on: ubuntu-latest
+    name: ${{ matrix.test_file }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+      - run: npm install
+      - run: node --test ${{ matrix.test_file }}
