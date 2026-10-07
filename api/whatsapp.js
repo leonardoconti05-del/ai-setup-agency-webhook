@@ -11,7 +11,7 @@ import { registraLacuna, tipoLacuna } from '../lib/lacune.js';
 import { puoProporreSlot, rispostaAppuntamentoEsistente } from '../lib/prenotazione.js';
 import { statoConDatiNoti } from '../lib/engine/state.js';
 import { createTenantContext } from '../lib/core/contracts.js';
-import { authorizeAction } from '../lib/governance/action-gateway.js';
+import { authorizeAction, executeGovernedAction } from '../lib/governance/action-gateway.js';
 
 function escapeXml(text) {
   return String(text)
@@ -472,25 +472,29 @@ export default async function handler(req, res) {
         const slotObj = { inizio: new Date(slotScelto.inizio), fine: new Date(slotScelto.fine) };
 
         let reply;
-        const polCal = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: 'create_calendar_event' });
-        if (packCaricato && !polCal.esegue) {
-          // Autonomia insufficiente per scrivere nel calendario: si registra la scelta e si chiede conferma al titolare.
-          await richiediApprovazione(ctxGov, { cliente_id, agent: 'whatsapp', action: 'create_calendar_event', payload: { numero_utente: telefono, inizio: slotObj.inizio.toISOString(), fine: slotObj.fine.toISOString() } });
-          reply = 'Ho registrato la sua scelta: lo studio le confermerà l\'appuntamento a breve.';
-          datiPrecedenti._fase = 'in_attesa_conferma';
-          datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
-          await ledger({ actor: 'agent:whatsapp', action: 'calendar_event_proposed', autonomy_level: polCal.livello, approval: 'pending', reason: polCal.motivo });
-        } else try {
-          await creaEvento(config.google_calendar_id, slotObj, datiPrecedenti, nomeAttivita);
-          reply = `Perfetto, appuntamento confermato per ${formattaSlot(slotObj)}. A presto!`;
-          datiPrecedenti._fase = 'confermato';
-          // Salviamo l'orario scelto (non solo il fatto che sia "confermato"):
-          // prima andava perso subito dopo — nessuna pagina poteva mostrare
-          // "prossimi appuntamenti" reali senza inventare una data.
-          datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
-          delete datiPrecedenti._slotOptions;
-          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar' });
-          await ledger({ actor: 'agent:whatsapp', action: 'calendar_event_created', autonomy_level: polCal.livello, reason: 'scelta_cliente' });
+        const actionPayload = { cliente_id, numero_utente: telefono, inizio: slotObj.inizio.toISOString(), fine: slotObj.fine.toISOString() };
+        try {
+          const decision = await executeGovernedAction({
+            tenantContext, action: 'create_calendar_event', payload: actionPayload, reason: 'customer_selected_calendar_slot',
+            SUPABASE_URL, headers,
+            execute: async () => creaEvento(config.google_calendar_id, slotObj, datiPrecedenti, nomeAttivita),
+            executorId: 'calendar.create_event',
+          });
+          if (decision.verdict === 'REQUIRE_APPROVAL') {
+            reply = 'Ho registrato la sua scelta: lo studio le confermerà l\'appuntamento a breve.';
+            datiPrecedenti._fase = 'in_attesa_conferma';
+            datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
+          } else if (decision.verdict === 'ALLOW' && decision.executed) {
+            reply = 'Perfetto, appuntamento confermato per ' + formattaSlot(slotObj) + '. A presto!';
+            datiPrecedenti._fase = 'confermato';
+            datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
+            delete datiPrecedenti._slotOptions;
+            await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'calendar' });
+          } else {
+            reply = 'Ho registrato la sua scelta, ma lo studio deve confermare l\'appuntamento prima di fissarlo.';
+            datiPrecedenti._fase = 'in_attesa_conferma';
+            datiPrecedenti._appuntamento_inizio = slotObj.inizio.toISOString();
+          }
         } catch (e) {
           console.error('Errore creazione evento calendario:', e);
           reply = 'Ho registrato la sua scelta, ma c\'è stato un problema tecnico nel confermare l\'orario. La contatteremo noi a breve per fissare l\'appuntamento.';
@@ -692,11 +696,24 @@ export default async function handler(req, res) {
     delete datiCombinati._ultimo_follow_up_il;
 
     const haQualcheDato = Object.entries(datiCombinati).some(([k, v]) => k !== 'urgente' && !k.startsWith('_') && v);
-    const polNotifica = valutaAzione({ righe: policyRighe, agent: 'whatsapp', action: 'notify_staff' });
-    if ((haQualcheDato || esitoMotore?.handoff) && (!packCaricato || polNotifica.esegue)) {
+    if (haQualcheDato || esitoMotore?.handoff) {
       const h = esitoMotore?.handoff;
-      const nota = h ? `Passaggio a persona: ${h.motivo}. ${h.riassunto}${h.dati_mancanti?.length ? ` Dati mancanti: ${h.dati_mancanti.join(', ')}.` : ''}` : '';
-      await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono }, nota);
+      const nota = h ? 'Passaggio a persona: ' + h.motivo + '. ' + h.riassunto + (h.dati_mancanti?.length ? ' Dati mancanti: ' + h.dati_mancanti.join(', ') + '.' : '') : '';
+      if (!packCaricato) {
+        await notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono }, nota);
+      } else {
+        const decision = await executeGovernedAction({
+          tenantContext, action: 'notify_staff', payload: { cliente_id, numero_utente: telefono, nota },
+          reason: h ? 'handoff_notification' : 'lead_data_collected', SUPABASE_URL, headers,
+          execute: async () => notificaStaff(config.telegram_chat_id, datiCombinati, telefono, nomeAttivita, urgente, { SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono }, nota),
+          executorId: 'telegram.notify_staff',
+        });
+        if (decision.verdict === 'REQUIRE_APPROVAL') {
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'notifica', stato: 'pending', dettaglio: { approval_id: decision.approval_id } });
+        } else if (decision.verdict !== 'ALLOW') {
+          await logEvento({ SUPABASE_URL, headers, requestId, clienteId: cliente_id, telefono, fase: 'notifica', stato: 'negato', dettaglio: { motivo: decision.reason } });
+        }
+      }
     }
 
     // FIX: un controllo "truthy" scarterebbe erroneamente valori come `false`
