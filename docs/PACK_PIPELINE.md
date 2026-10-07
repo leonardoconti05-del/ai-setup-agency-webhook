@@ -26,3 +26,16 @@ Codice: `lib/admin/pack-pipeline.js` (logica) e `lib/admin/pack-http.js` (indiri
 5. **Rimuovi `PACK_ADMIN_TOKEN` da Vercel** e fai Redeploy: l'endpoint torna chiuso (503).
 
 Protezioni: token solo da variabile d'ambiente (≥32 caratteri, altrimenti 503), confronto a tempo costante, 401 senza o con token errato, 400 per payload/azione/settore non validi, 429 dopo troppi tentativi (per IP e globale persistente), ritardo fisso sugli errori, nessun token nelle risposte né nei log.
+
+## Runtime Compatibility Harness (`lib/engine/harness.js`)
+
+Prova end-to-end che un pack in **TEST** funziona con lo stesso percorso del runtime reale, **senza promuoverlo e senza modificare il database**:
+
+`caricaPackPerHarness` (stesso codice di `caricaPackProduzione`) → `eseguiMotore` → `authorizeAction` (governance reale).
+
+- Si usa dalla pagina `/api/admin-pack` con il pulsante **Harness runtime** (azione `harness`, protetta da `PACK_ADMIN_TOKEN`). Va eseguito prima di ogni promozione.
+- Sonde: ricavate dal pack stesso (primo esempio di ogni intent, prima frase di urgenza critica, prima richiesta di una persona, prima richiesta sensibile, un saluto). Nessun dato di clienti.
+- Controlla: nessuna eccezione; risposta valida (non vuota, senza segnaposto); azione riconosciuta; telemetria coerente con settore e versione; urgenza critica scalata; richiesta di una persona gestita; la governance non nega `reply` / `handoff` / `emergency_escalation` (registry di agenti e azioni letti dal database reale).
+- Garanzie: zero scritture (ogni richiesta non-GET è bloccata e fa fallire la prova); stato del profilo riletto prima e dopo; l'unica traccia è una riga in `sector_pack_audit` (evento `verifica`, solo conteggi).
+- Il webhook **non** importa il loader dell'harness (c'è un test): i clienti vedono solo pack in `production`.
+- **Limiti dichiarati:** il modello è simulato (si verifica l'integrazione, non la qualità delle risposte LLM) e la riga `tenant_action_policy` del tenant di prova è simulata (autonomia 5). Superare l'harness non sostituisce né il Pack Gate né l'holdout.
