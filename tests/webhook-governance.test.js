@@ -14,7 +14,11 @@ const { default: handler } = await import('../api/whatsapp.js');
 const realFetch = globalThis.fetch;
 let st;
 
-function installa({ conPack = true, policy = [], ledgerAssente = false } = {}) {
+function installa({ conPack = true, policy = [
+    { agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} },
+    { agent_id: 'whatsapp', action: 'handoff', autonomy_level: 3, condizioni: {} },
+    { agent_id: 'whatsapp', action: 'emergency_escalation', autonomy_level: 5, condizioni: {} },
+  ], ledgerAssente = false } = {}) {
   st = { ledger: [], approvazioni: [], salvataggi: [], anthropic: [] };
   globalThis.fetch = async (url, opts = {}) => {
     const u = String(url);
@@ -64,7 +68,7 @@ describe('governance nel webhook', () => {
     assert.equal(st.ledger.length, 1);
     const l = st.ledger[0];
     assert.equal(l.cliente_id, 'c1'); assert.equal(l.action, 'reply_sent'); assert.equal(l.pack_version, 3);
-    assert.equal(l.autonomy_level, 5); assert.equal(l.prompt_version, 'motore-2');
+    assert.equal(l.autonomy_level, 3); assert.equal(l.prompt_version, 'motore-2');
     assert.ok(l.sources.some((s) => s.tipo === 'pack' && s.settore === 'dentista' && s.versione === 3));
     assert.equal(verificaCatena(st.ledger).ok, true);
     const dump = JSON.stringify(st.ledger);

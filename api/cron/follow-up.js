@@ -144,11 +144,22 @@ export default async function handler(req, res) {
       // automatici (livello < 3, oppure 4 = solo con approvazione) non si invia nulla.
       // Senza righe in tenant_action_policy vale il default storico (invia).
       const ctxGov = { SUPABASE_URL, headers };
-      const polFollowUp = valutaAzione({ righe: await caricaPolicy(ctxGov, config.cliente_id), agent: 'followup', action: 'send_followup' });
-      if (!polFollowUp.esegue) {
+      const policyRows = await caricaPolicy(ctxGov, config.cliente_id);
+      const policyFollowUp = policyRows.find((r) => r.agent_id === 'followup' && r.action === 'send_followup');
+      // Explicit tenant policy is mandatory for autonomous follow-up.
+      // Only autonomy 3 or 5 may execute without approval; 0-2 are proposal-only
+      // and 4 requires approval, which this cron cannot satisfy.
+      const autonomiaFollowUp = policyFollowUp ? Number(policyFollowUp.autonomy_level) : null;
+      if (!policyFollowUp || !Number.isInteger(autonomiaFollowUp) || ![3, 5].includes(autonomiaFollowUp)) {
         riepilogo.saltatiPolicy++;
         continue;
       }
+      const polFollowUp = {
+        livello: autonomiaFollowUp,
+        esegue: true,
+        motivo: 'policy_tenant',
+        policy_version: POLICY_VERSION,
+      };
 
       // 2. Richieste "in_corso" (lead non convertito) di questo cliente
       const richiesteRes = await fetch(
