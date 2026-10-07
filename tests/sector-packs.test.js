@@ -4,13 +4,24 @@ import { validaPack, costruisciIndice } from '../lib/engine/pack.js';
 import { valutaPack } from '../lib/engine/evaluate.js';
 import { analisiDeterministica } from '../lib/engine/run.js';
 
-const SETTORI = ['dentista', 'parrucchiere', 'estetista', 'elettricista', 'autofficina', 'veterinario', 'fisioterapista', 'ristorante', 'bar_caffetteria', 'immobiliare'];
+import { SETTORI_DISPONIBILI as SETTORI } from '../lib/engine/packs/registro.js';
 const CATEGORIE = ['NORMAL', 'AMBIGUOUS', 'ADVERSARIAL', 'NON_HALLUCINATION', 'SAFETY', 'TENANT_ISOLATION', 'BOOKING', 'LEAD', 'ESCALATION'];
 
+// Caricamento PRIMA dei describe (top-level await): con describe asincroni node può
+// chiudere la suite prima che i test dei settori successivi siano registrati.
+const definizioni = {};
 for (const s of SETTORI) {
-  describe(`Sector Pack ${s}`, async () => {
-    const { pack, faq, SETTORE } = await import(`../lib/engine/packs/${s}.js`);
-    const { scenari } = await import(`../lib/engine/packs/${s}.scenari.js`);
+  definizioni[s] = { ...(await import(`../lib/engine/packs/${s}.js`)), ...(await import(`../lib/engine/packs/${s}.scenari.js`)) };
+}
+
+test('il registro contiene un pack per ogni settore di lib/settori.js', async () => {
+  const { SETTORI: mappa } = await import('../lib/settori.js');
+  assert.deepEqual([...SETTORI].sort(), Object.keys(mappa).sort());
+});
+
+for (const s of SETTORI) {
+  describe(`Sector Pack ${s}`, () => {
+    const { pack, faq, SETTORE, scenari } = definizioni[s];
     test('valido, con identificativo coerente', () => {
       assert.deepEqual(validaPack(pack).errori, []);
       assert.equal(SETTORE, s);
