@@ -144,8 +144,10 @@ export default async function handler(req, res) {
       // automatici (livello < 3, oppure 4 = solo con approvazione) non si invia nulla.
       // Senza righe in tenant_action_policy vale il default storico (invia).
       const ctxGov = { SUPABASE_URL, headers };
-      const polFollowUp = valutaAzione({ righe: await caricaPolicy(ctxGov, config.cliente_id), agent: 'followup', action: 'send_followup' });
-      if (!polFollowUp.esegue) {
+      const policyRows = await caricaPolicy(ctxGov, config.cliente_id);
+      const polFollowUp = valutaAzione({ righe: policyRows, agent: 'followup', action: 'send_followup' });
+      // Explicit tenant policy is mandatory for autonomous follow-up.
+      if (!policyRows.some((r) => r.agent_id === 'followup' && r.action === 'send_followup')) {
         riepilogo.saltatiPolicy++;
         continue;
       }
