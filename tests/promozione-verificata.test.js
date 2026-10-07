@@ -106,11 +106,65 @@ test('endpoint: un settore regolamentato nella serie dà 422 e non cambia stato'
 });
 
 test('pagina: il modulo "Promuovi in serie" esiste, lo script è valido e separa i settori per virgola/spazio', () => {
-  const html = PAGINA.replace('__SETTORI__', JSON.stringify(SETTORI_DISPONIBILI));
+  const html = PAGINA.replace('__SETTORI__', JSON.stringify(SETTORI_DISPONIBILI)).replace('__REGOLAMENTATI__', JSON.stringify(SETTORI_REGOLAMENTATI));
   assert.match(html, /b-serie/);
   assert.match(html, /promuovi_verificato/);
   const js = html.split('<script>')[1].split('</script>')[0];
   assert.doesNotThrow(() => new Function(js));
   const re = new Function(`return ${html.match(/split\((\/[^)]*)\)/)[1]}`)();
   assert.deepEqual('immobiliare, ristorante  bar_caffetteria'.split(re), ['immobiliare', 'ristorante', 'bar_caffetteria']);
+});
+
+// ===== Serie regolamentati con conferma esplicita =====
+test('regolamentati: senza conferma (o con conferma non esatta) sempre rifiutati; stato invariato', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'medico');
+  for (const conferma of [undefined, 'confermo', 'CONFERMO ', 'si', true, 'CONFERMO1']) {
+    const body = { token: TOKEN, azione: 'promuovi_verificato', settore: 'medico', ...(conferma === undefined ? {} : { conferma_regolamentati: conferma }) };
+    assert.equal((await chiama(db, body)).codice, 422, String(conferma));
+  }
+  assert.equal(stato(db, 'medico'), 'test');
+});
+
+test('regolamentati: con CONFERMO esatto si eseguono harness e controlli, si promuove e l\'audit registra la conferma', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'veterinario');
+  const r = await chiama(db, { token: TOKEN, azione: 'promuovi_verificato', settore: 'veterinario', conferma_regolamentati: 'CONFERMO' });
+  assert.equal(r.codice, 200, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.fase, 'promosso');
+  assert.equal(r.corpo.harness.sonde_passate, r.corpo.harness.sonde);
+  assert.equal(stato(db, 'veterinario'), 'production');
+  const conferme = db.t.sector_pack_audit.filter((a) => a.evento === 'verifica' && a.dettaglio?.regolamentato_confermato === true);
+  assert.equal(conferme.length, 1);
+  assert.equal(conferme[0].settore, 'veterinario');
+  assert.equal(db.t.sector_pack_audit.filter((a) => a.evento === 'promozione' && a.esito === 'ok').length, 1);
+});
+
+test('regolamentati: anche con CONFERMO, se l\'harness fallisce non si promuove', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'avvocato');
+  const r = await promuoviVerificato(db.ctx, 'avvocato', {
+    confermaRegolamentati: true,
+    harness: async () => ({ ok: false, sonde: 3, sonde_passate: 2, fallite: [{ sonda: 'x', motivo: 'm' }], errori: ['1 sonde fallite'] }),
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.fase, 'harness');
+  assert.equal(stato(db, 'avvocato'), 'test');
+});
+
+test('regolamentati: la conferma non promuove altri settori e non vale per quelli non importati', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'medico');
+  const r = await chiama(db, { token: TOKEN, azione: 'promuovi_verificato', settore: 'commercialista', conferma_regolamentati: 'CONFERMO' });
+  assert.equal(r.codice, 422);
+  assert.equal(stato(db, 'medico'), 'test');
+});
+
+test('pagina: il modulo "Serie regolamentati" esiste, chiede CONFERMO e lo script è valido', () => {
+  const html = PAGINA.replace('__SETTORI__', JSON.stringify(SETTORI_DISPONIBILI)).replace('__REGOLAMENTATI__', JSON.stringify(SETTORI_REGOLAMENTATI));
+  assert.match(html, /b-serie-reg/);
+  assert.match(html, /Scrivi CONFERMO/);
+  assert.match(html, /conferma_regolamentati/);
+  const js = html.split('<script>')[1].split('</script>')[0];
+  assert.doesNotThrow(() => new Function(js));
 });
