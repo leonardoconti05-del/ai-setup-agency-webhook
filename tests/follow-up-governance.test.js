@@ -12,12 +12,12 @@ const { default: handler } = await import('../api/cron/follow-up.js');
 const realFetch = globalThis.fetch;
 let st;
 
-function installa(policy) {
+function installa(policy, clienteId = 'c1') {
   st = { twilio: 0, ledger: [] };
   globalThis.fetch = async (url, opts = {}) => {
     const u = String(url);
     const json = (v, status = 200) => ({ ok: status < 300, status, json: async () => v });
-    if (u.includes('/configurazioni_cliente')) return json([{ cliente_id: 'c1', numero_whatsapp: '+39000', nome_attivita: 'Studio X', follow_up_dopo_ore: 24, follow_up_max_messaggi: 2, follow_up_orario_da: '00:00:00', follow_up_orario_a: '23:59:59', follow_up_messaggio: null }]);
+    if (u.includes('/configurazioni_cliente')) return json([{ cliente_id: clienteId, numero_whatsapp: '+39000', nome_attivita: 'Studio X', follow_up_dopo_ore: 24, follow_up_max_messaggi: 2, follow_up_orario_da: '00:00:00', follow_up_orario_a: '23:59:59', follow_up_messaggio: null }]);
     if (u.includes('/tenant_action_policy')) return json(policy);
     if (u.includes('/richieste_clienti') && !opts.method) return json([{ id: 'r1', numero_utente: '+39333', dati_raccolti: { nome: 'A' }, updated_at: new Date(Date.now() - 72 * 3600e3).toISOString() }]);
     if (u.includes('/richieste_clienti') && opts.method === 'PATCH') return json([{ id: 'r1' }]);
@@ -41,13 +41,13 @@ const chiama = async () => {
 };
 
 test('policy mancante: il follow-up è negato', async () => {
-  installa([]);
+  installa([], 'c1');
   const r = await chiama();
   assert.equal(r.inviati, 0); assert.equal(st.twilio, 0); assert.equal(r.saltatiPolicy, 1);
 });
 
 test('policy esplicita livello 3: il follow-up parte e finisce nel ledger senza telefono', async () => {
-  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 3, condizioni: {} }]);
+  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 3, condizioni: {} }], 'c2');
   const r = await chiama();
   assert.equal(r.inviati, 1); assert.equal(st.twilio, 1);
   assert.equal(st.ledger.length, 1);
@@ -56,13 +56,13 @@ test('policy esplicita livello 3: il follow-up parte e finisce nel ledger senza 
 });
 
 test('il titolare ha messo il follow-up a livello 2 (solo bozza): nessun invio', async () => {
-  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 2, condizioni: {} }]);
+  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 2, condizioni: {} }], 'c3');
   const r = await chiama();
   assert.equal(r.inviati, 0); assert.equal(st.twilio, 0); assert.equal(r.saltatiPolicy, 1);
 });
 
 test('livello 4 (serve approvazione): il cron non invia da solo', async () => {
-  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 4, condizioni: {} }]);
+  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 4, condizioni: {} }], 'c4');
   const r = await chiama();
   assert.equal(st.twilio, 0); assert.equal(r.saltatiPolicy, 1);
 });
