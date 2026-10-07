@@ -27,6 +27,7 @@ function installa({ conPack = true, policy = [], ledgerAssente = false } = {}) {
       const actions = {
         reply: { action_id: 'reply', name: 'Reply', risk_level: 'low', required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', active: true, metadata: { agent: 'whatsapp' } },
         handoff: { action_id: 'handoff', name: 'Handoff', risk_level: 'medium', required_autonomy: 3, approval_required: false, executor: 'whatsapp.handoff', executor_version: '1', active: true, metadata: { agent: 'whatsapp' } },
+        emergency_escalation: { action_id: 'emergency_escalation', name: 'Emergency escalation', risk_level: 'critical', required_autonomy: 5, approval_required: false, executor: 'whatsapp.emergency_escalation', executor_version: '1', active: true, metadata: { agent: 'whatsapp' } },
       };
       return json(requested && actions[requested] ? [actions[requested]] : []);
     }
