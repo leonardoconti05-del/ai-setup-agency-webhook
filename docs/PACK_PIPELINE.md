@@ -48,3 +48,4 @@ Per ridurre i click senza ridurre i controlli. Per **un** settore (azione `promu
 - **Serie:** il campo "Promuovi in serie" della pagina admin prende fino a 8 settori scritti da te, chiede conferma e li esegue **uno alla volta, nell'ordine**, fermandosi al primo problema (i successivi non vengono toccati). Nessuna promozione parte da sola e nessun settore non elencato viene toccato.
 - **Auditabile:** ogni rifiuto e ogni promozione lascia una riga in `sector_pack_audit` (con la fase in cui si è fermato).
 - Il primo giro dell'holdout resta il dato ufficiale di generalizzazione e viene registrato a ogni promozione; superare harness e gate non lo sostituisce.
+- **Settori già attivi:** nella promozione verificata (anche in serie) un settore già in `production` non è un errore: esito `saltato` (ok), nessuna modifica, una riga di audit `saltato`, e la serie prosegue con i successivi.

@@ -168,3 +168,49 @@ test('pagina: il modulo "Serie regolamentati" esiste, chiede CONFERMO e lo scrip
   const js = html.split('<script>')[1].split('</script>')[0];
   assert.doesNotThrow(() => new Function(js));
 });
+
+// ===== Settori già attivi: saltati, non bloccano la serie =====
+test('già in production: esito "saltato" (ok), nessuna modifica, audit "saltato"', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'immobiliare');
+  assert.equal((await promuoviVerificato(db.ctx, 'immobiliare')).ok, true);
+  const prima = JSON.stringify(db.t.sector_profiles) + JSON.stringify(db.t.sector_faq);
+  const r = await promuoviVerificato(db.ctx, 'immobiliare');
+  assert.equal(r.ok, true);
+  assert.equal(r.esito, 'saltato');
+  assert.equal(r.fase, 'gia_attivo');
+  assert.equal(JSON.stringify(db.t.sector_profiles) + JSON.stringify(db.t.sector_faq), prima);
+  assert.equal(db.t.sector_pack_audit.filter((a) => a.evento === 'promozione' && a.esito === 'saltato').length, 1);
+  assert.equal(db.t.sector_pack_audit.filter((a) => a.evento === 'promozione' && a.esito === 'ok').length, 1);
+});
+
+test('serie con un settore già attivo in mezzo: il saltato risponde 200/ok e i successivi si promuovono', async () => {
+  const db = dbConGovernance();
+  for (const s of ['immobiliare', 'ristorante', 'bar_caffetteria']) await importaPack(db.ctx, s);
+  assert.equal((await chiama(db, { token: TOKEN, azione: 'promuovi_verificato', settore: 'ristorante' })).codice, 200);
+  const esiti = [];
+  for (const s of ['immobiliare', 'ristorante', 'bar_caffetteria']) {
+    const r = await chiama(db, { token: TOKEN, azione: 'promuovi_verificato', settore: s });
+    assert.equal(r.codice, 200, `${s}: ${JSON.stringify(r.corpo)}`);
+    assert.equal(r.corpo.ok, true);
+    esiti.push(r.corpo.esito);
+  }
+  assert.deepEqual(esiti, ['ok', 'saltato', 'ok']);
+  for (const s of ['immobiliare', 'ristorante', 'bar_caffetteria']) assert.equal(stato(db, s), 'production');
+});
+
+test('un settore regolamentato già attivo viene saltato senza chiedere la conferma e senza toccarlo', async () => {
+  const db = dbConGovernance();
+  await importaPack(db.ctx, 'medico');
+  db.t.sector_profiles.find((p) => p.settore === 'medico').status = 'production';
+  const r = await promuoviVerificato(db.ctx, 'medico');
+  assert.equal(r.ok, true);
+  assert.equal(r.esito, 'saltato');
+});
+
+test('un settore non importato o in test continua a seguire i controlli normali (non viene "saltato")', async () => {
+  const db = dbConGovernance();
+  const r = await promuoviVerificato(db.ctx, 'ristorante');
+  assert.equal(r.ok, false);
+  assert.equal(r.fase, 'harness');
+});
