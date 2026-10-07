@@ -44,7 +44,7 @@ Prova end-to-end che un pack in **TEST** funziona con lo stesso percorso del run
 
 Per ridurre i click senza ridurre i controlli. Per **un** settore (azione `promuovi_verificato`): harness runtime → (se superato) promozione con tutti i controlli già previsti (stesso contenuto del codice, validazione, compatibilità, gate, metadata holdout, trigger del database) → audit.
 
-- **Settori regolamentati rifiutati sempre** (`SETTORI_REGOLAMENTATI` in `pack-pipeline.js`): serve una revisione professionale. Restano promuovibili solo con il pulsante manuale "Promuovi ad ACTIVE", cioè con una decisione esplicita.
+- **Settori regolamentati** (`SETTORI_REGOLAMENTATI` in `pack-pipeline.js`): la serie normale li rifiuta. Si promuovono dal campo "Serie regolamentati", che esegue gli stessi controlli (harness, compatibilità, gate, audit) e richiede di scrivere a mano la parola `CONFERMO`: il server accetta solo il testo esatto, e l'audit registra una riga `verifica` con `regolamentato_confermato: true` prima della promozione. La conferma non sostituisce la revisione professionale dei contenuti: è la presa in carico esplicita del titolare.
 - **Serie:** il campo "Promuovi in serie" della pagina admin prende fino a 8 settori scritti da te, chiede conferma e li esegue **uno alla volta, nell'ordine**, fermandosi al primo problema (i successivi non vengono toccati). Nessuna promozione parte da sola e nessun settore non elencato viene toccato.
 - **Auditabile:** ogni rifiuto e ogni promozione lascia una riga in `sector_pack_audit` (con la fase in cui si è fermato).
 - Il primo giro dell'holdout resta il dato ufficiale di generalizzazione e viene registrato a ogni promozione; superare harness e gate non lo sostituisce.
