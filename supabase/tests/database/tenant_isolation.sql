@@ -12,8 +12,6 @@ select policies_are(
   'configurazioni_cliente exposes only the expected tenant policies'
 );
 
-set local role authenticated;
-
 select set_config(
   'request.jwt.claims',
   json_build_object(
@@ -25,6 +23,8 @@ select set_config(
   )::text,
   true
 );
+
+set local role authenticated;
 
 select is(
   (select count(*)::int from public.configurazioni_cliente where cliente_id = private.current_cliente_id()),
