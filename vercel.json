@@ -11,5 +11,16 @@
   ],
   "regions": [
     "fra1"
-  ]
+  ],
+  "rewrites": [
+    {
+      "source": "/api/admin-pack",
+      "destination": "/api/cron/retention?modo=admin-pack"
+    }
+  ],
+  "functions": {
+    "api/cron/retention.js": {
+      "maxDuration": 60
+    }
+  }
 }

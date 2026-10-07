@@ -1,8 +1,13 @@
 // api/cron/retention.js — conservazione dei dati (vedi lib/retention.js). Una volta al giorno.
 // Protetto da CRON_SECRET (fail-closed, come follow-up).
+// NB: questa funzione ospita anche /api/admin-pack (rewrite in vercel.json → ?modo=admin-pack): il piano
+// Vercel gratuito ammette al massimo 12 funzioni e sono già tutte usate. L'accesso amministrativo ha
+// un'autenticazione separata (PACK_ADMIN_TOKEN) e non passa mai da CRON_SECRET.
 import { eseguiConservazione } from '../../lib/retention.js';
+import { gestisciAdminPack } from '../../lib/admin/pack-http.js';
 
 export default async function handler(req, res) {
+  if (req.query?.modo === 'admin-pack') return gestisciAdminPack(req, res);
   const CRON_SECRET = process.env.CRON_SECRET;
   if (!CRON_SECRET) return res.status(500).json({ error: 'Server misconfigured: CRON_SECRET missing' });
   if (req.headers.authorization !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Non autorizzato' });
