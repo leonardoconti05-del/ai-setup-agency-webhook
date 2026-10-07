@@ -18,7 +18,13 @@ function db({ agent = [{ agent_id: 'whatsapp', attivo: true }], action = [{ acti
   const f = async (url, opts = {}) => {
     const u = new URL(url);
     if (u.pathname.endsWith('/agent_registry')) return { ok: true, status: 200, json: async () => agent };
-    if (u.pathname.endsWith('/action_registry')) return { ok: true, status: 200, json: async () => action };
+    if (u.pathname.endsWith('/action_registry')) {
+      const requested = u.searchParams.get('action_id')?.replace('eq.', '');
+      if (requested && action.length > 0 && action[0]?.action_id && requested !== action[0].action_id) {
+        return { ok: true, status: 200, json: async () => [] };
+      }
+      return { ok: true, status: 200, json: async () => action };
+    }
     if (u.pathname.endsWith('/tenant_action_policy')) return { ok: true, status: 200, json: async () => policy };
     if (u.pathname.endsWith('/approval_requests')) return { ok: true, status: 201, json: async () => [{ id: 'approval-1' }] };
     return { ok: false, status: 404, json: async () => ({}) };
