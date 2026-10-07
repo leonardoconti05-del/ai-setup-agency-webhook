@@ -581,7 +581,7 @@ export default async function handler(req, res) {
 
     let polReply = null;
     if (esitoMotore) {
-      const actionId = esitoMotore.handoff ? 'handoff' : 'reply';
+      const actionId = esitoMotore.azione?.action === 'emergency_escalation' ? 'emergency_escalation' : esitoMotore.handoff ? 'handoff' : 'reply';
       const payloadAzione = {
         cliente_id,
         numero_utente: telefono,
