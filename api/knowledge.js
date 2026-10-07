@@ -94,12 +94,19 @@ export default async function handler(req, res) {
         return res.status(500).send('<h2>Errore nel salvataggio del documento</h2>');
       }
 
-      // 2. Chunking + embedding (best-effort: se l'embedding fallisce, il
-      // documento resta comunque salvato — meglio un documento senza
-      // retrieval che nessun documento).
+      // 2. Chunking + embedding + persistence formano un'unica unità logica:
+      // un documento senza chunk non è una Knowledge Base utilizzabile.
+      // Se l'indicizzazione fallisce, eliminiamo il documento appena creato
+      // (CASCADE sui chunk) e restituiamo un errore esplicito.
       try {
         const chunk = spezzaInChunk(contenuto);
+        if (chunk.length === 0) throw new Error('Nessun chunk generato dal contenuto');
+
         const embeddings = await embedDocumenti(chunk);
+        if (!Array.isArray(embeddings) || embeddings.length !== chunk.length || embeddings.some((v) => !Array.isArray(v) || v.length === 0)) {
+          throw new Error('Embedding incompleto o non valido');
+        }
+
         const righeChunk = chunk.map((testo, i) => ({
           document_id: documento.id,
           cliente_id,
@@ -107,15 +114,30 @@ export default async function handler(req, res) {
           contenuto: testo,
           embedding: embeddings[i],
         }));
-        if (righeChunk.length > 0) {
-          await fetch(`${SUPABASE_URL}/rest/v1/knowledge_chunks`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(righeChunk),
-          });
+
+        const chunksRes = await fetch(SUPABASE_URL + '/rest/v1/knowledge_chunks', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(righeChunk),
+        });
+        if (!chunksRes.ok) {
+          const dettaglio = await chunksRes.text();
+          throw new Error('Salvataggio knowledge_chunks fallito (' + chunksRes.status + '): ' + dettaglio.slice(0, 300));
         }
       } catch (e) {
-        console.error('Errore generazione embedding per documento', documento.id, ':', e);
+        console.error('Indicizzazione Knowledge Base fallita per documento', documento.id, ':', e);
+
+        try {
+          await fetch(
+            SUPABASE_URL + '/rest/v1/documents?id=eq.' + encodeURIComponent(documento.id) + '&cliente_id=eq.' + encodeURIComponent(cliente_id),
+            { method: 'DELETE', headers }
+          );
+        } catch (cleanupError) {
+          console.error('Cleanup documento Knowledge Base fallito:', cleanupError);
+        }
+
+        res.setHeader('Content-Type', 'text/html');
+        return res.status(502).send('<h2>Impossibile indicizzare il documento</h2><p>Il contenuto non è stato pubblicato nella Knowledge Base. Riprova tra poco.</p>');
       }
 
       res.writeHead(302, { Location: '/api/knowledge' });
