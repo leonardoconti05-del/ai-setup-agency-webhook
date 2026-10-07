@@ -31,11 +31,15 @@ function installa({ conPack, settore = 'dentista', anthropicRotto = false }) {
       return json(requested && actions[requested] ? [actions[requested]] : []);
     }
     if (u.includes('/agent_registry')) return json([{ agent_id: 'whatsapp', attivo: true }]);
-    if (u.includes('/tenant_action_policy')) return json([
-      { agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} },
-      { agent_id: 'whatsapp', action: 'handoff', autonomy_level: 3, condizioni: {} },
-      { agent_id: 'whatsapp', action: 'emergency_escalation', autonomy_level: 5, condizioni: {} },
-    ]);
+    if (u.includes('/tenant_action_policy')) {
+      const action = new URL(u).searchParams.get('action')?.replace('eq.', '');
+      const policies = [
+        { agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} },
+        { agent_id: 'whatsapp', action: 'handoff', autonomy_level: 3, condizioni: {} },
+        { agent_id: 'whatsapp', action: 'emergency_escalation', autonomy_level: 5, condizioni: {} },
+      ];
+      return json(policies.filter((p) => !action || p.action === action));
+    }
     if (u.includes('/approval_requests')) return json([{ id: 'ap1' }], 201);
     if (u.includes('/servizi_cliente') || u.includes('/personale_cliente')) return json([]);
     if (u.includes('match_knowledge_chunks') || u.includes('voyage')) return json([]);
