@@ -14,7 +14,7 @@ function ctx(overrides = {}) {
   };
 }
 
-function db({ agent = [{ agent_id: 'whatsapp', attivo: true }], action = [{ action_id: 'reply', active: true, required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', risk_level: 'low' }], policy = [] } = {}) {
+function db({ agent = [{ agent_id: 'whatsapp', attivo: true }], action = [{ action_id: 'reply', active: true, required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', risk_level: 'low', metadata: { agent: 'whatsapp' } }], policy = [] } = {}) {
   const f = async (url, opts = {}) => {
     const u = new URL(url);
     if (u.pathname.endsWith('/agent_registry')) return { ok: true, status: 200, json: async () => agent };
@@ -56,10 +56,23 @@ describe('Action Gateway', () => {
     assert.equal(r.reason, 'insufficient_autonomy');
   });
 
+  test('registered action cannot be invoked by the wrong agent', async () => {
+    const action=[{ action_id:'reply',active:true,required_autonomy:3,approval_required:false,executor:'whatsapp.reply',executor_version:'1',risk_level:'low',metadata:{agent:'whatsapp'} }];
+    const r=await authorizeAction({tenantContext:ctx({agent:'followup'}),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db({action,agent:[{agent_id:'followup',attivo:true}]})});
+    assert.equal(r.verdict,'DENY');
+    assert.equal(r.reason,'action_agent_mismatch');
+  });
+
+  test('model-controlled cross-tenant payload is denied', async () => {
+    const r=await authorizeAction({tenantContext:ctx(),action:'reply',payload:{cliente_id:'00000000-0000-0000-0000-000000000999'},SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db()});
+    assert.equal(r.verdict,'DENY');
+    assert.equal(r.reason,'payload_tenant_mismatch');
+  });
+
   test('approval is required before execution', async () => {
     const action=[{ action_id:'reply',active:true,required_autonomy:3,approval_required:true,executor:'whatsapp.reply',executor_version:'1',risk_level:'medium' }];
     let executed=false;
-    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db({action}),execute:async()=>{executed=true;}});
+    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db({action}),execute:async()=>{executed=true;},executorId:'whatsapp.reply'});
     assert.equal(r.verdict,'REQUIRE_APPROVAL');
     assert.equal(r.approval_id,'approval-1');
     assert.equal(executed,false);
@@ -68,7 +81,7 @@ describe('Action Gateway', () => {
   test('executor runs only after ALLOW and is auditable', async () => {
     const ledger=[];
     let executed=false;
-    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db(),ledger:async(e)=>ledger.push(e),execute:async({executor})=>{executed=executor==='whatsapp.reply';return {sent:true};}});
+    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db(),ledger:async(e)=>ledger.push(e),execute:async({executor})=>{executed=executor==='whatsapp.reply';return {sent:true};},executorId:'whatsapp.reply'});
     assert.equal(r.verdict,'ALLOW');
     assert.equal(r.executed,true);
     assert.equal(executed,true);
@@ -78,9 +91,20 @@ describe('Action Gateway', () => {
 
   test('executor failure is audited and never reclassified as success', async () => {
     const ledger=[];
-    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db(),ledger:async(e)=>ledger.push(e),execute:async()=>{throw new Error('provider down');}});
+    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db(),ledger:async(e)=>ledger.push(e),execute:async()=>{throw new Error('provider down');},executorId:'whatsapp.reply'});
     assert.equal(r.executed,false);
     assert.equal(r.error,'provider down');
     assert.equal(ledger.at(-1).result,'error');
+  });
+});
+
+
+describe('executor binding', () => {
+  test('unregistered executor cannot execute', async () => {
+    const ledger=[];
+    const r=await executeGovernedAction({tenantContext:ctx(),action:'reply',SUPABASE_URL:'https://s.test',headers:{Authorization:'Bearer x'},fetchImpl:db(),ledger:async(e)=>ledger.push(e),execute:async()=>({sent:true}),executorId:'wrong.executor'});
+    assert.equal(r.verdict,'DENY');
+    assert.equal(r.reason,'executor_not_authorized');
+    assert.equal(ledger.at(-1).result,'denied:executor_not_authorized');
   });
 });
