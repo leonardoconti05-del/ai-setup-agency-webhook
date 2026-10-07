@@ -30,6 +30,7 @@ function installa({ conPack = true, policy = [], ledgerAssente = false } = {}) {
       };
       return json(requested && actions[requested] ? [actions[requested]] : []);
     }
+    if (u.includes('/agent_registry')) return json([{ agent_id: 'whatsapp', attivo: true }]);
     if (u.includes('/tenant_action_policy')) return json(policy);
     if (u.includes('/approval_requests')) { st.approvazioni.push(JSON.parse(opts.body)); return json([{ id: 'ap1' }], 201); }
     if (u.includes('/ai_action_ledger')) {
