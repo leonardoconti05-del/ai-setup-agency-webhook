@@ -1,4 +1,4 @@
-import { test, beforeEach, afterEach } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { svuotaCachePolicy } from '../lib/governance/policy.js';
 
@@ -40,6 +40,7 @@ const chiama = async () => {
   return out;
 };
 
+describe('follow-up governance', { concurrency: false }, () => {
 test('policy mancante: il follow-up è negato', async () => {
   installa([], 'c1');
   const r = await chiama();
@@ -65,4 +66,5 @@ test('livello 4 (serve approvazione): il cron non invia da solo', async () => {
   installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 4, condizioni: {} }], 'c4');
   const r = await chiama();
   assert.equal(st.twilio, 0); assert.equal(r.saltatiPolicy, 1);
+});
 });
