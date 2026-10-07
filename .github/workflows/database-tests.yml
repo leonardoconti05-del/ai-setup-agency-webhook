@@ -1,0 +1,25 @@
+name: database-tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pgtap:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Run pgTAP against configured database
+        if: env.SUPABASE_DB_URL != ''
+        run: supabase test db --db-url "$SUPABASE_DB_URL"
+
+      - name: Explain skipped database test
+        if: env.SUPABASE_DB_URL == ''
+        run: echo "SUPABASE_DB_URL is not configured; database test execution is intentionally skipped."
