@@ -39,8 +39,14 @@ const chiama = async () => {
   return out;
 };
 
-test('policy di default: il follow-up parte e finisce nel ledger senza telefono', async () => {
+test('policy mancante: il follow-up è negato', async () => {
   installa([]);
+  const r = await chiama();
+  assert.equal(r.inviati, 0); assert.equal(st.twilio, 0); assert.equal(r.saltatiPolicy, 1);
+});
+
+test('policy esplicita livello 3: il follow-up parte e finisce nel ledger senza telefono', async () => {
+  installa([{ agent_id: 'followup', action: 'send_followup', autonomy_level: 3, condizioni: {} }]);
   const r = await chiama();
   assert.equal(r.inviati, 1); assert.equal(st.twilio, 1);
   assert.equal(st.ledger.length, 1);
