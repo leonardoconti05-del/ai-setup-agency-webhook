@@ -14,7 +14,7 @@ function ctx(overrides = {}) {
   };
 }
 
-function db({ agent = [{ agent_id: 'whatsapp', attivo: true }], action = [{ action_id: 'reply', active: true, required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', risk_level: 'low', metadata: { agent: 'whatsapp' } }], policy = [] } = {}) {
+function db({ agent = [{ agent_id: 'whatsapp', attivo: true }], action = [{ action_id: 'reply', active: true, required_autonomy: 3, approval_required: false, executor: 'whatsapp.reply', executor_version: '1', risk_level: 'low', metadata: { agent: 'whatsapp' } }], policy = [{ agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} }] } = {}) {
   const f = async (url, opts = {}) => {
     const u = new URL(url);
     if (u.pathname.endsWith('/agent_registry')) return { ok: true, status: 200, json: async () => agent };
