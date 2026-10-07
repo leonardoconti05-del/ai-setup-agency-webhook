@@ -14,7 +14,11 @@ const { default: handler } = await import('../api/whatsapp.js');
 const realFetch = globalThis.fetch;
 let st;
 
-function installa({ conPack = true, policy = [{ agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} }], ledgerAssente = false } = {}) {
+function installa({ conPack = true, policy = [
+    { agent_id: 'whatsapp', action: 'reply', autonomy_level: 3, condizioni: {} },
+    { agent_id: 'whatsapp', action: 'handoff', autonomy_level: 3, condizioni: {} },
+    { agent_id: 'whatsapp', action: 'emergency_escalation', autonomy_level: 5, condizioni: {} },
+  ], ledgerAssente = false } = {}) {
   st = { ledger: [], approvazioni: [], salvataggi: [], anthropic: [] };
   globalThis.fetch = async (url, opts = {}) => {
     const u = String(url);
