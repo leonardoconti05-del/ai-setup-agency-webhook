@@ -16,6 +16,10 @@
     {
       "source": "/api/admin-pack",
       "destination": "/api/cron/retention?modo=admin-pack"
+    },
+    {
+      "source": "/api/core-health",
+      "destination": "/api/cron/retention?modo=core-health"
     }
   ],
   "functions": {
