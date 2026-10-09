@@ -1,0 +1,2 @@
+ALTER TABLE "public"."documents" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."knowledge_chunks" ENABLE ROW LEVEL SECURITY;

@@ -1,0 +1,29 @@
+-- 20261009040200_move_vector_extension.sql — sposta l'estensione pgvector da public a extensions (avviso "extension_in_public").
+--
+-- !! PROPOSTA, NON APPLICARE SENZA AVER PROVATO LA SEQUENZA DI PROVA SOTTO (transazione con ROLLBACK). Sta in migrations/proposte/ apposta !!
+-- Non è stato possibile eseguirla nell'ambiente di sviluppo (manca pgvector): è la parte meno verificata dell'audit.
+--
+-- COMPATIBILITÀ ANALIZZATA:
+--  - Dipendenze dell'estensione nel database: colonna knowledge_chunks.embedding vector(1024), indice
+--    knowledge_chunks_embedding_idx (ivfflat), funzione public.match_knowledge_chunks(uuid, vector, int).
+--  - pgvector è rilocabile: ALTER EXTENSION ... SET SCHEMA sposta tipo, operatori e funzioni; colonna e indice seguono
+--    (riferimenti per OID), nessun dato viene riscritto.
+--  - La funzione usa l'operatore <=> risolto a runtime tramite search_path: oggi 'public, pg_temp'. Dopo lo spostamento
+--    l'operatore sta in 'extensions', quindi il search_path della funzione DEVE includere extensions, altrimenti la
+--    ricerca RAG fallisce con "operator does not exist". Per questo la migration li cambia insieme, nella stessa transazione.
+--  - Il codice applicativo chiama solo l'RPC match_knowledge_chunks via REST e inserisce gli embedding come array JSON:
+--    non nomina mai lo schema del tipo.
+-- PRECONDIZIONI: schema extensions esistente (c'è: ospita pgcrypto, uuid-ossp, pgtap); ruolo postgres; knowledge_chunks oggi vuota.
+-- ROLLBACK:
+--   alter extension vector set schema public;
+--   alter function public.match_knowledge_chunks(uuid, vector, integer) set search_path = public, pg_temp;
+--
+-- SEQUENZA DI PROVA (SQL editor; non lascia tracce grazie al ROLLBACK). Deve stampare una riga e nessun errore:
+--   begin;
+--   alter extension vector set schema extensions;
+--   alter function public.match_knowledge_chunks(uuid, extensions.vector, integer) set search_path = public, extensions, pg_temp;
+--   select * from public.match_knowledge_chunks('00000000-0000-0000-0000-000000000000'::uuid, array_fill(0.1::real, array[1024])::extensions.vector, 1);
+--   select n.nspname from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname = 'vector';   -- extensions
+--   rollback;
+alter extension vector set schema extensions;
+alter function public.match_knowledge_chunks(uuid, extensions.vector, integer) set search_path = public, extensions, pg_temp;
