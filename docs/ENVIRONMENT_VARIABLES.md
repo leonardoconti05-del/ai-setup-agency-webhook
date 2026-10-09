@@ -43,3 +43,7 @@ repository — solo su Vercel.
   (log di errore + risposta 500), non silenziosamente — vedi i controlli
   `if (!SESSION_SECRET)` / `if (!TWILIO_AUTH_TOKEN)` in cima agli
   handler.
+
+### CORE_HEALTH_TOKEN
+
+Token (minimo 32 caratteri casuali) per `GET /api/core-health`, il contratto di salute in sola lettura di Jarvis (vedi `docs/JARVIS_CONTRACT.md`). Solo su Vercel, mai nel repo. Se manca o è corto, l'endpoint risponde 503 (chiuso). Distinto da `CRON_SECRET` e `PACK_ADMIN_TOKEN`.

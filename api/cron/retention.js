@@ -2,12 +2,14 @@
 // Protetto da CRON_SECRET (fail-closed, come follow-up).
 // NB: questa funzione ospita anche /api/admin-pack (rewrite in vercel.json → ?modo=admin-pack): il piano
 // Vercel gratuito ammette al massimo 12 funzioni e sono già tutte usate. L'accesso amministrativo ha
-// un'autenticazione separata (PACK_ADMIN_TOKEN) e non passa mai da CRON_SECRET.
+// un'autenticazione separata (PACK_ADMIN_TOKEN) e non passa mai da CRON_SECRET. Stessa cosa per /api/core-health (CORE_HEALTH_TOKEN, sola lettura).
 import { eseguiConservazione } from '../../lib/retention.js';
 import { gestisciAdminPack } from '../../lib/admin/pack-http.js';
+import { gestisciCoreHealth } from '../../lib/core/health-http.js';
 
 export default async function handler(req, res) {
   if (req.query?.modo === 'admin-pack') return gestisciAdminPack(req, res);
+  if (req.query?.modo === 'core-health') return gestisciCoreHealth(req, res); // sola lettura, token separato (CORE_HEALTH_TOKEN)
   const CRON_SECRET = process.env.CRON_SECRET;
   if (!CRON_SECRET) return res.status(500).json({ error: 'Server misconfigured: CRON_SECRET missing' });
   if (req.headers.authorization !== `Bearer ${CRON_SECRET}`) return res.status(401).json({ error: 'Non autorizzato' });
