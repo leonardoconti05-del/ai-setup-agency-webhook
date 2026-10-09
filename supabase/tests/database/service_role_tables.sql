@@ -2,7 +2,7 @@
 -- Richiede la migration 20261009040000_audit_privileges_hardening.sql. Eseguito da `supabase test db`.
 -- Valido su Postgres 15, 16 e 17: i privilegi di struttura si leggono da aclexplode, MAINTAIN compare solo dove esiste.
 begin;
-select plan(47);
+select plan(54);
 
 -- 1. service_role: nessun TRUNCATE / REFERENCES / TRIGGER / MAINTAIN (7 controlli)
 select is(
@@ -25,6 +25,10 @@ select ok(has_table_privilege('service_role', 'public.sector_test_scenarios', 'D
 select is((select count(*)::int from aclexplode((select relacl from pg_class where oid = ('public.' || t)::regclass)) a where a.grantee = 'anon'::regrole), 0, t || ': anon senza privilegi')
 from unnest(array['agent_registry','clienti','jarvis_summaries','sector_eval_runs','sector_faq','sector_profiles','sector_test_scenarios']) as t;
 select is((select count(*)::int from aclexplode((select relacl from pg_class where oid = ('public.' || t)::regclass)) a where a.grantee = 'authenticated'::regrole), 0, t || ': authenticated senza privilegi')
+from unnest(array['agent_registry','clienti','jarvis_summaries','sector_eval_runs','sector_faq','sector_profiles','sector_test_scenarios']) as t;
+
+-- 4-bis. PUBLIC (grantee 0): nessun privilegio, di nessun tipo (7 controlli)
+select is((select count(*)::int from aclexplode((select relacl from pg_class where oid = ('public.' || t)::regclass)) a where a.grantee = 0), 0, t || ': PUBLIC senza privilegi')
 from unnest(array['agent_registry','clienti','jarvis_summaries','sector_eval_runs','sector_faq','sector_profiles','sector_test_scenarios']) as t;
 
 -- 5. RLS attivo su tutte (7 controlli)

@@ -42,11 +42,12 @@ describe('migration privilegi audit', () => {
 
 describe('test pgTAP sulle sette tabelle', () => {
   const t = leggi('supabase/tests/database/service_role_tables.sql');
-  test('il piano dichiarato coincide con i controlli (47) e copre tutte e sette le tabelle', () => {
-    assert.match(t, /select plan\(47\);/);
+  test('il piano dichiarato coincide con i controlli (54) e copre tutte e sette le tabelle', () => {
+    assert.match(t, /select plan\(54\);/);
     for (const x of ['agent_registry', 'clienti', 'jarvis_summaries', 'sector_eval_runs', 'sector_faq', 'sector_profiles', 'sector_test_scenarios']) assert.ok(t.includes(`'${x}'`), x);
     assert.match(t, /'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'/);
     assert.match(t, /has_table_privilege\('service_role', 'public\.' \|\| t, 'SELECT'\)/);
+    assert.match(t, /PUBLIC senza privilegi/);
     assert.match(t, /sector_faq', 'DELETE'/);
     assert.match(t, /sector_test_scenarios', 'DELETE'/);
   });
@@ -63,8 +64,9 @@ describe('privilegi predefiniti e proposta pgvector', () => {
   });
   test('il test pgTAP dei privilegi predefiniti controlla livello globale, schema e tabella nuova', () => {
     const t = leggi('supabase/tests/database/default_privileges.sql');
-    assert.match(t, /select plan\(3\);/);
+    assert.match(t, /select plan\(6\);/);
     assert.match(t, /defaclnamespace = 0/);
+    assert.match(t, /a\.grantee = 0/);
     assert.match(t, /defaclnamespace = 'public'::regnamespace/);
     assert.match(t, /create table public\.zz_probe_default_acl/);
   });

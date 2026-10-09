@@ -38,6 +38,7 @@ Privilegi reali [V: `pg_class.relacl`, `pg_default_acl`, `pg_auth_members`], Pos
 * **Gravità**: ALTA per l'obiettivo del registro (la chiave `service_role`, se compromessa, poteva azzerare lo storico: TRUNCATE non attiva i trigger di riga). Per anon/authenticated lo sfruttamento richiederebbe esecuzione di SQL con quei ruoli, che l'API REST non offre per TRUNCATE [I]: è difesa in profondità.
 * **Correzioni**: `20261009040000_audit_privileges_hardening.sql` (privilegi esistenti), `20261009040100_default_privileges_hardening.sql` (tabelle future).
 * **Privilegi predefiniti, livello globale e di schema** [V: `pg_default_acl` il 9/10/2026]: i privilegi predefiniti di un ruolo sono l'unione della voce globale (`defaclnamespace = 0`) e di quella dello schema. Per il ruolo `postgres` esiste **solo** la voce dello schema `public` per le tabelle (`anon`, `authenticated`, `service_role` = `Dxtm`); **nessuna voce globale per le tabelle**. Una revoca limitata allo schema non toglierebbe una voce globale, quindi `20261009040100` ora revoca a entrambi i livelli (non sottrae nulla di necessario: non c'è nessuna concessione globale da conservare e i privilegi sui dati non sono toccati). Provato anche con una variante ipotetica con voce globale (`GLOBALE=1 scripts/db-local/run-audit-check.sh`): la versione precedente della migration lasciava 9 voci strutturali, la nuova no.
+* **PUBLIC** [V: `aclexplode` con `grantee = 0` su tutte le tabelle di `public` e su tutta `pg_default_acl`, 9/10/2026, sola lettura]: nessuna concessione a `PUBLIC` né sulle 23 tabelle (nessuna ha `relacl` nullo) né nei privilegi predefiniti (globali e di schema, per qualsiasi ruolo). Nessuna correzione necessaria alle migration. I test pgTAP lo verificano comunque (sette tabelle, predefiniti globali e di schema, tabella nuova di prova) e, con una concessione a PUBLIC introdotta apposta in locale, falliscono (6 controlli).
 * **Non toccato, da sapere** [V]: il ruolo `supabase_admin` ha come predefiniti per `public` `arwdDxtm` ad anon, authenticated e service_role. Vale solo per le tabelle create da `supabase_admin`; le 23 tabelle di `public` sono tutte di proprietà di `postgres` [V], quindi oggi non produce effetti. Cambiarlo richiede il ruolo `supabase_admin` (non disponibile dall'editor SQL con `postgres`): non fatto, da non creare tabelle con quel ruolo.
 * Trigger e RLS non sono considerati sufficienti: i test verificano i privilegi con `aclexplode`, il comportamento reale con `SET ROLE`, e che anche il proprietario sia fermato dal trigger.
 
@@ -130,9 +131,17 @@ Problemi trovati: (a) indice ivfflat con `lists=100` creato su tabella vuota: pg
 
 File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (19 test), questo documento.
 
-* **Test Node** `tests/audit-fase1.test.js`: 19/19. Suite completa su questo branch: 382/382 (main + 19 nuovi).
-* **Prova su Postgres 16 locale** con lo stato di produzione riprodotto (fixture con i privilegi sui dati come in produzione; `scripts/db-local/run-audit-check.sh`, sostituto minimo di pgTAP, esegue i 3 file pgTAP = 17 + 47 + 3 = 67 controlli): **prima** delle migration 39 controlli su 67 falliscono (TRUNCATE riuscito per anon, authenticated e service_role su tutte le tabelle); **dopo** 67/67; seconda esecuzione senza errori (idempotenza). I nuovi controlli sulle sette tabelle falliscono davvero con la versione precedente della migration (verificato). Limiti: Postgres 16, quindi il ramo `server_version_num >= 170000` (MAINTAIN) **non è stato eseguito**: è l'unico ramo non provato; su 15/16 il comando non contiene mai la parola `maintain` (controllo statico nei test Node). Fixture riprodotta e non il database reale, shim al posto di pgTAP.
-* **Non eseguiti**: i test pgTAP veri (nessun `SUPABASE_DB_URL`), la proposta pgvector, qualsiasi prova su Supabase.
+Esiti separati per tipo di esecuzione (non vanno sommati né confusi):
+
+| Tipo | Che cosa | Esito |
+|---|---|---|
+| **Locale, reale** | Suite Node completa (`npm test`) su questo branch | 382/382 (main + 19 nuovi); `tests/audit-fase1.test.js`: 19/19 |
+| **Locale, simulato** | Postgres 16 con stato di produzione riprodotto (fixture) e shim al posto di pgTAP: esegue i 3 file pgTAP = 17 + 54 + 6 = 77 controlli | prima delle migration 39 su 77 falliscono; dopo 77/77; seconda esecuzione senza errori (idempotenza); variante ipotetica con voce globale: 77/77; variante con PUBLIC introdotto apposta: 6 controlli falliscono come previsto |
+| **CI GitHub** | workflow `test` e `database-tests` sul commit della PR | verdi, **ma** il passo pgTAP del job `pgtap` è «skipped» (nessun segreto `SUPABASE_DB_URL`): il verde non prova nulla sul database |
+| **pgTAP vero su database Supabase di test** | `supabase test db` sui 4 file di `supabase/tests/database/` | **NON ESEGUITO** (bloccato dalla configurazione, sezione 8-bis) |
+| **Letture di produzione** | `relacl`, `pg_default_acl`, `pg_auth_members`, `aclexplode` (anche per PUBLIC) | sola lettura, nessuna modifica |
+
+Limiti: Postgres 16 in locale, quindi il ramo `server_version_num >= 170000` (MAINTAIN) non è stato eseguito; fixture riprodotta e non il database reale; la proposta pgvector non è provata; nulla è stato applicato su Supabase.
 
 ## 8. Applicazione manuale (SQL editor di Supabase, ruolo postgres)
 
