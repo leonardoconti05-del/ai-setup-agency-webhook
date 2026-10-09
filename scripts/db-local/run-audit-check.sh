@@ -18,6 +18,12 @@ risultati() {
     sed -e 's/^select \* from finish();$/select n, case when ok then $$ok$$ else $$NOT OK$$ end as esito, descr, coalesce(detail,$$$$) as dettaglio from tap.res order by n;/' "$f" | psql -qX -At -F ' | ' -d $DB 2>&1 | grep -E '^[0-9]+ \|' || true
   done
 }
+# GLOBALE=1: variante IPOTETICA (non è lo stato di produzione, dove non esiste nessuna voce globale per postgres):
+# aggiunge anche una concessione globale (defaclnamespace = 0) per provare che la migration revoca ad entrambi i livelli.
+if [ "${GLOBALE:-0}" = "1" ]; then
+  $P -c "alter default privileges for role postgres grant truncate, references, trigger on tables to anon, authenticated, service_role"
+  echo "(variante ipotetica: concessione globale aggiunta)"
+fi
 echo "###### PRIMA delle migration (stato di produzione riprodotto)"; risultati
 $P -c "set role postgres" -f migrations/20261009040000_audit_privileges_hardening.sql
 $P -f migrations/20261009040100_default_privileges_hardening.sql

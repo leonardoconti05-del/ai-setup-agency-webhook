@@ -16,10 +16,25 @@ jobs:
         with:
           version: latest
 
+      # Il segreto SUPABASE_DB_URL deve puntare a un database DI TEST (mai alla produzione). Il valore non viene mai stampato.
+      - name: Rifiuta il database di produzione
+        if: env.SUPABASE_DB_URL != ''
+        run: |
+          if printf '%s' "$SUPABASE_DB_URL" | grep -q 'qgljkqlronoeofsytwqm'; then
+            echo "::error::SUPABASE_DB_URL punta al progetto di PRODUZIONE. Configurare un database di test."
+            exit 1
+          fi
+
       - name: Run pgTAP against configured database
         if: env.SUPABASE_DB_URL != ''
         run: supabase test db --db-url "$SUPABASE_DB_URL"
 
-      - name: Explain skipped database test
+      - name: Test di database NON eseguiti (segreto assente)
         if: env.SUPABASE_DB_URL == ''
-        run: echo "SUPABASE_DB_URL is not configured; database test execution is intentionally skipped."
+        run: |
+          echo "::warning title=pgTAP non eseguito::SUPABASE_DB_URL non e' configurato: nessun test di database e' stato eseguito. Questo controllo verde NON prova nulla sul database."
+          {
+            echo "### pgTAP NON eseguito"
+            echo "Il segreto SUPABASE_DB_URL non e' configurato: nessun test di database e' stato eseguito."
+            echo "Vedi docs/AUDIT_FASE1.md, sezione 'Database di test per pgTAP'."
+          } >> "$GITHUB_STEP_SUMMARY"

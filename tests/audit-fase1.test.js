@@ -53,10 +53,28 @@ describe('test pgTAP sulle sette tabelle', () => {
 });
 
 describe('privilegi predefiniti e proposta pgvector', () => {
-  test('privilegi predefiniti: revoca soltanto, mai grant', () => {
+  test('privilegi predefiniti: revoca sia al livello dello schema sia al livello globale', () => {
     const sql = senzaCommenti(leggi('migrations/20261009040100_default_privileges_hardening.sql'));
-    assert.match(sql, /alter default privileges for role postgres in schema public\s+revoke truncate, references, trigger on tables from anon, authenticated, service_role/);
+    assert.match(sql, /alter default privileges for role postgres\s+revoke truncate, references, trigger on tables from anon, authenticated, service_role/);
+    assert.match(sql, /execute 'alter default privileges for role postgres revoke maintain on tables/);
+    assert.match(sql, /server_version_num'\)::int >= 170000/);
     assert.doesNotMatch(sql, /\bgrant\b/);
+    assert.doesNotMatch(sql.replace(/execute 'alter default[^']*maintain[^']*'/g, ''), /maintain/);
+  });
+  test('il test pgTAP dei privilegi predefiniti controlla livello globale, schema e tabella nuova', () => {
+    const t = leggi('supabase/tests/database/default_privileges.sql');
+    assert.match(t, /select plan\(3\);/);
+    assert.match(t, /defaclnamespace = 0/);
+    assert.match(t, /defaclnamespace = 'public'::regnamespace/);
+    assert.match(t, /create table public\.zz_probe_default_acl/);
+  });
+  test('workflow database-tests: rifiuta la produzione, non stampa segreti e segnala il test non eseguito', () => {
+    const y = leggi('.github/workflows/database-tests.yml');
+    assert.match(y, /qgljkqlronoeofsytwqm/);
+    assert.match(y, /supabase test db --db-url "\$SUPABASE_DB_URL"/);
+    assert.match(y, /::warning/);
+    assert.doesNotMatch(y, /echo[^\n]*\$SUPABASE_DB_URL/);
+    assert.doesNotMatch(y, /postgres(ql)?:\/\/[^\s"']+:[^\s"']+@/);
   });
   test('lo spostamento di pgvector è una proposta, non una migration applicabile per errore', () => {
     assert.ok(existsSync(new URL('../migrations/proposte/20261009040200_move_vector_extension.sql', import.meta.url)));

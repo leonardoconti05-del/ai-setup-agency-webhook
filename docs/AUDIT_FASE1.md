@@ -37,6 +37,8 @@ Privilegi reali [V: `pg_class.relacl`, `pg_default_acl`, `pg_auth_members`], Pos
 * **Causa radice** [V]: `pg_default_acl` (ruolo `postgres`, schema `public`) concede TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ad anon, authenticated e service_role su ogni tabella nuova. Lo stesso residuo c'è su sette tabelle riservate al servizio (`agent_registry`, `clienti`, `jarvis_summaries`, `sector_eval_runs`, `sector_faq`, `sector_profiles`, `sector_test_scenarios`): [V: `relacl` del 9/10/2026] anon e authenticated hanno `Dxtm`, service_role ha `arwdDxtm` (`jarvis_summaries`: `arwDxtm`, senza DELETE). La migration toglie ad anon/authenticated tutto, a service_role **solo** TRUNCATE, REFERENCES, TRIGGER e MAINTAIN (dove esiste, Postgres ≥ 17): SELECT/INSERT/UPDATE/DELETE restano, perché il backend li usa (es. `lib/admin/pack-pipeline.js` fa DELETE su `sector_faq` e `sector_test_scenarios`). Correzione di una versione precedente di questa migration, che lasciava a service_role i privilegi di struttura su queste sette tabelle.
 * **Gravità**: ALTA per l'obiettivo del registro (la chiave `service_role`, se compromessa, poteva azzerare lo storico: TRUNCATE non attiva i trigger di riga). Per anon/authenticated lo sfruttamento richiederebbe esecuzione di SQL con quei ruoli, che l'API REST non offre per TRUNCATE [I]: è difesa in profondità.
 * **Correzioni**: `20261009040000_audit_privileges_hardening.sql` (privilegi esistenti), `20261009040100_default_privileges_hardening.sql` (tabelle future).
+* **Privilegi predefiniti, livello globale e di schema** [V: `pg_default_acl` il 9/10/2026]: i privilegi predefiniti di un ruolo sono l'unione della voce globale (`defaclnamespace = 0`) e di quella dello schema. Per il ruolo `postgres` esiste **solo** la voce dello schema `public` per le tabelle (`anon`, `authenticated`, `service_role` = `Dxtm`); **nessuna voce globale per le tabelle**. Una revoca limitata allo schema non toglierebbe una voce globale, quindi `20261009040100` ora revoca a entrambi i livelli (non sottrae nulla di necessario: non c'è nessuna concessione globale da conservare e i privilegi sui dati non sono toccati). Provato anche con una variante ipotetica con voce globale (`GLOBALE=1 scripts/db-local/run-audit-check.sh`): la versione precedente della migration lasciava 9 voci strutturali, la nuova no.
+* **Non toccato, da sapere** [V]: il ruolo `supabase_admin` ha come predefiniti per `public` `arwdDxtm` ad anon, authenticated e service_role. Vale solo per le tabelle create da `supabase_admin`; le 23 tabelle di `public` sono tutte di proprietà di `postgres` [V], quindi oggi non produce effetti. Cambiarlo richiede il ruolo `supabase_admin` (non disponibile dall'editor SQL con `postgres`): non fatto, da non creare tabelle con quel ruolo.
 * Trigger e RLS non sono considerati sufficienti: i test verificano i privilegi con `aclexplode`, il comportamento reale con `SET ROLE`, e che anche il proprietario sia fermato dal trigger.
 
 ## 3. Avvisi Supabase [V: `get_advisors`, 9/10/2026 01:00 UTC]
@@ -126,10 +128,10 @@ Problemi trovati: (a) indice ivfflat con `lists=100` creato su tabella vuota: pg
 
 ## 7. Modifiche e test (risultati reali)
 
-File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (17 test), questo documento.
+File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (19 test), questo documento.
 
-* **Test Node** `tests/audit-fase1.test.js`: 17/17. Suite completa su questo branch: 380/380 (main + 17 nuovi).
-* **Prova su Postgres 16 locale** con lo stato di produzione riprodotto (fixture con i privilegi sui dati come in produzione; `scripts/db-local/run-audit-check.sh`, sostituto minimo di pgTAP, esegue i 3 file pgTAP = 17 + 47 + 1 = 65 controlli): **prima** delle migration 38 controlli su 65 falliscono (TRUNCATE riuscito per anon, authenticated e service_role su tutte le tabelle); **dopo** 65/65; seconda esecuzione senza errori (idempotenza). I nuovi controlli sulle sette tabelle falliscono davvero con la versione precedente della migration (verificato). Limiti: Postgres 16, quindi il ramo `server_version_num >= 170000` (MAINTAIN) **non è stato eseguito**: è l'unico ramo non provato; su 15/16 il comando non contiene mai la parola `maintain` (controllo statico nei test Node). Fixture riprodotta e non il database reale, shim al posto di pgTAP.
+* **Test Node** `tests/audit-fase1.test.js`: 19/19. Suite completa su questo branch: 382/382 (main + 19 nuovi).
+* **Prova su Postgres 16 locale** con lo stato di produzione riprodotto (fixture con i privilegi sui dati come in produzione; `scripts/db-local/run-audit-check.sh`, sostituto minimo di pgTAP, esegue i 3 file pgTAP = 17 + 47 + 3 = 67 controlli): **prima** delle migration 39 controlli su 67 falliscono (TRUNCATE riuscito per anon, authenticated e service_role su tutte le tabelle); **dopo** 67/67; seconda esecuzione senza errori (idempotenza). I nuovi controlli sulle sette tabelle falliscono davvero con la versione precedente della migration (verificato). Limiti: Postgres 16, quindi il ramo `server_version_num >= 170000` (MAINTAIN) **non è stato eseguito**: è l'unico ramo non provato; su 15/16 il comando non contiene mai la parola `maintain` (controllo statico nei test Node). Fixture riprodotta e non il database reale, shim al posto di pgTAP.
 * **Non eseguiti**: i test pgTAP veri (nessun `SUPABASE_DB_URL`), la proposta pgvector, qualsiasi prova su Supabase.
 
 ## 8. Applicazione manuale (SQL editor di Supabase, ruolo postgres)
@@ -146,12 +148,27 @@ select grantee::regrole, privilege_type from aclexplode((select relacl from pg_c
 
 Prova end-to-end del RAG (da fare con un tenant di prova, mai con un cliente): caricare un documento breve da `/api/knowledge`; verificare 1 riga in `documents` e ≥1 in `knowledge_chunks` con `embedding` non nullo; inviare su WhatsApp una domanda che solo quel documento può risolvere; controllare nel log `knowledge_base` `trovato=true` e `hitCount>0`; ripetere con un secondo tenant e verificare `hitCount=0` per quella domanda; eliminare il documento e verificare che i chunk spariscano.
 
+## 8-bis. Database di test per pgTAP (cosa deve configurare il titolare)
+
+**Perché il passo è «skipped»** [V: `.github/workflows/database-tests.yml`]: il passo «Run pgTAP against configured database» ha la condizione `env.SUPABASE_DB_URL != ''`, e la variabile viene dal segreto `secrets.SUPABASE_DB_URL`, che nel repository **non esiste**. Il job risulta quindi verde senza eseguire nulla: un verde che non prova niente. Nel workflow ho aggiunto: (a) un rifiuto esplicito se l'URL contiene il riferimento del progetto di produzione; (b) per il caso «segreto assente», un `::warning` e un riepilogo del job che dicono chiaramente che i test non sono stati eseguiti. Il valore del segreto non viene mai stampato. Resta verde (per non bloccare le PR di chi non ha un database di test), ma non più in silenzio.
+
+**Cosa non posso fare io**: creare il database di test e il segreto. Non ho inventato né impostato nulla.
+
+**Cosa deve fare il titolare**
+1. Creare un progetto Supabase **separato da quello di produzione** (o un branch di database), solo per i test. Mai la produzione.
+2. Portarlo allo stesso schema del repository, cioè applicare in ordine tutte le migration di `migrations/` (comprese `migrations/recovered/`, che contengono la barriera di isolamento tenant e `enable_pgtap_testing`), poi `20261009040000` e `20261009040100`. Non applicare `migrations/proposte/`. Senza questo i test falliscono per tabelle mancanti, non per difetti reali.
+3. Verificare che l'estensione `pgtap` sia attiva sul database di test (la migration `enable_pgtap_testing`).
+4. In GitHub: Settings → Secrets and variables → Actions → New repository secret, nome `SUPABASE_DB_URL`, valore = stringa di connessione Postgres del **database di test** (utente `postgres`; con GitHub Actions di solito serve la connessione del pooler in modalità sessione, perché la connessione diretta è solo IPv6). Il segreto non è disponibile alle PR da fork.
+5. Rilanciare il job `pgtap` (Actions → database-tests → Run workflow) e controllare che il passo «Run pgTAP against configured database» NON sia «skipped» e che i file `audit_privileges`, `service_role_tables`, `default_privileges`, `tenant_isolation` risultino eseguiti.
+
+**Stato**: bloccato dalla configurazione. Finché non è fatto, nessun test pgTAP è stato eseguito su un database Supabase. Quanto sopra non è una prova superata.
+
 ## 9. Verifiche per un revisore indipendente prima di merge e deployment
 
 1. Rieseguire la query ACL della sezione 8 e confrontare la tabella della sezione 2.
 2. Eseguire `scripts/db-local/run-audit-check.sh` su un Postgres locale e controllare che «prima» fallisca e «dopo» passi.
 3. Verificare con `grep` che `api/` e `lib/` non usino mai la chiave anon (`grep -rn "ANON\|anon" api lib`): la revoca presuppone che sia così.
-4. Configurare `SUPABASE_DB_URL` di un database **di test** e confermare che il job `pgtap` esegua i test (non "skipped").
+4. Configurare `SUPABASE_DB_URL` di un database **di test** (sezione 8-bis) e confermare che il job `pgtap` esegua i test (non "skipped").
 5. Confrontare i sei file di `migrations/recovered/` con `supabase_migrations.schema_migrations` (MD5 nella README).
 6. Rileggere `20261009040100`: modifica i privilegi predefiniti, quindi le tabelle create in futuro non avranno TRUNCATE/REFERENCES/TRIGGER per i ruoli API.
 7. Per la v2 dei pack: i sei criteri della sezione 4, in particolare il giro reale su WhatsApp.
