@@ -34,7 +34,7 @@ Privilegi reali [V: `pg_class.relacl`, `pg_default_acl`, `pg_auth_members`], Pos
 
 * UPDATE e DELETE non erano concessi a nessun ruolo API, e i trigger `sector_pack_audit_no_update/no_delete` sono attivi [V].
 * Ereditarietà: `anon`, `authenticated` e `service_role` non sono membri di altri ruoli; `authenticator` è membro con NOINHERIT [V]. Nessun privilegio arriva per ruolo.
-* **Causa radice** [V]: `pg_default_acl` (ruolo `postgres`, schema `public`) concede TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ad anon, authenticated e service_role su ogni tabella nuova. Lo stesso residuo c'è su sette tabelle riservate al servizio (`agent_registry`, `clienti`, `jarvis_summaries`, `sector_eval_runs`, `sector_faq`, `sector_profiles`, `sector_test_scenarios`).
+* **Causa radice** [V]: `pg_default_acl` (ruolo `postgres`, schema `public`) concede TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ad anon, authenticated e service_role su ogni tabella nuova. Lo stesso residuo c'è su sette tabelle riservate al servizio (`agent_registry`, `clienti`, `jarvis_summaries`, `sector_eval_runs`, `sector_faq`, `sector_profiles`, `sector_test_scenarios`): [V: `relacl` del 9/10/2026] anon e authenticated hanno `Dxtm`, service_role ha `arwdDxtm` (`jarvis_summaries`: `arwDxtm`, senza DELETE). La migration toglie ad anon/authenticated tutto, a service_role **solo** TRUNCATE, REFERENCES, TRIGGER e MAINTAIN (dove esiste, Postgres ≥ 17): SELECT/INSERT/UPDATE/DELETE restano, perché il backend li usa (es. `lib/admin/pack-pipeline.js` fa DELETE su `sector_faq` e `sector_test_scenarios`). Correzione di una versione precedente di questa migration, che lasciava a service_role i privilegi di struttura su queste sette tabelle.
 * **Gravità**: ALTA per l'obiettivo del registro (la chiave `service_role`, se compromessa, poteva azzerare lo storico: TRUNCATE non attiva i trigger di riga). Per anon/authenticated lo sfruttamento richiederebbe esecuzione di SQL con quei ruoli, che l'API REST non offre per TRUNCATE [I]: è difesa in profondità.
 * **Correzioni**: `20261009040000_audit_privileges_hardening.sql` (privilegi esistenti), `20261009040100_default_privileges_hardening.sql` (tabelle future).
 * Trigger e RLS non sono considerati sufficienti: i test verificano i privilegi con `aclexplode`, il comportamento reale con `SET ROLE`, e che anche il proprietario sia fermato dal trigger.
@@ -126,10 +126,10 @@ Problemi trovati: (a) indice ivfflat con `lists=100` creato su tabella vuota: pg
 
 ## 7. Modifiche e test (risultati reali)
 
-File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 2 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (14 test), questo documento.
+File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (17 test), questo documento.
 
-* **Test Node** `tests/audit-fase1.test.js`: 14/14. Suite completa su questo branch (main + 14 nuovi): 377/377.
-* **Prova su Postgres 16 locale** con lo stato di produzione riprodotto (`scripts/db-local/run-audit-check.sh`, sostituto minimo di pgTAP): **prima** delle migration 8 controlli su 18 falliscono, compreso `TRUNCATE` riuscito per anon, authenticated e service_role (e lo storico svuotato); **dopo** 18/18; seconda esecuzione senza errori (idempotenza). Limiti: Postgres 16 (nessun privilegio MAINTAIN, la parte per Postgres 17 è saltata), fixture riprodotta e non il database reale, shim al posto di pgTAP.
+* **Test Node** `tests/audit-fase1.test.js`: 17/17. Suite completa su questo branch: 380/380 (main + 17 nuovi).
+* **Prova su Postgres 16 locale** con lo stato di produzione riprodotto (fixture con i privilegi sui dati come in produzione; `scripts/db-local/run-audit-check.sh`, sostituto minimo di pgTAP, esegue i 3 file pgTAP = 17 + 47 + 1 = 65 controlli): **prima** delle migration 38 controlli su 65 falliscono (TRUNCATE riuscito per anon, authenticated e service_role su tutte le tabelle); **dopo** 65/65; seconda esecuzione senza errori (idempotenza). I nuovi controlli sulle sette tabelle falliscono davvero con la versione precedente della migration (verificato). Limiti: Postgres 16, quindi il ramo `server_version_num >= 170000` (MAINTAIN) **non è stato eseguito**: è l'unico ramo non provato; su 15/16 il comando non contiene mai la parola `maintain` (controllo statico nei test Node). Fixture riprodotta e non il database reale, shim al posto di pgTAP.
 * **Non eseguiti**: i test pgTAP veri (nessun `SUPABASE_DB_URL`), la proposta pgvector, qualsiasi prova su Supabase.
 
 ## 8. Applicazione manuale (SQL editor di Supabase, ruolo postgres)
@@ -139,7 +139,7 @@ Prima, in sola lettura, per vedere lo stato di partenza:
 select grantee::regrole, privilege_type from aclexplode((select relacl from pg_class where oid='public.sector_pack_audit'::regclass)) order by 1,2;
 ```
 1. Incollare ed eseguire `migrations/20261009040000_audit_privileges_hardening.sql`, poi `…040100_default_privileges_hardening.sql`. Precondizioni: nessuna. Effetto: solo revoche. Rollback: riga indicata in testa a ciascun file.
-2. Rieseguire la query di sopra: devono restare solo `service_role | INSERT` e `service_role | SELECT`.
+2. Rieseguire la query di sopra: devono restare solo `service_role | INSERT` e `service_role | SELECT`. Per le sette tabelle: `select relname, relacl::text from pg_class where relnamespace='public'::regnamespace and relname in ('agent_registry','clienti','jarvis_summaries','sector_eval_runs','sector_faq','sector_profiles','sector_test_scenarios');` deve mostrare per service_role solo `arwd` (`arw` per `jarvis_summaries`) e nessuna voce per anon e authenticated.
 3. Controllo funzionale: dalla pagina admin eseguire "Verifica stato": deve continuare a funzionare (scrive l'audit con INSERT).
 4. Facoltativo, **solo dopo** la prova in transazione descritta in `migrations/proposte/…040200…`: spostamento di pgvector.
 5. Non applicare nulla di `migrations/recovered/`: è già nel database.

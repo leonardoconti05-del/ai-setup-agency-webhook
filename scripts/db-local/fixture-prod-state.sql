@@ -17,4 +17,7 @@ create table sector_profiles (id int); create table sector_test_scenarios (id in
 alter table agent_registry enable row level security; alter table clienti enable row level security; alter table jarvis_summaries enable row level security;
 alter table sector_eval_runs enable row level security; alter table sector_faq enable row level security; alter table sector_profiles enable row level security;
 alter table sector_test_scenarios enable row level security;
+-- privilegi sui dati come in produzione (relacl del 9/10/2026): service_role arwd, jarvis_summaries senza DELETE
+grant select, insert, update, delete on agent_registry, clienti, sector_eval_runs, sector_faq, sector_profiles, sector_test_scenarios to service_role;
+grant select, insert, update on jarvis_summaries to service_role;
 reset role;

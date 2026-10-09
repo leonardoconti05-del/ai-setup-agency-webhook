@@ -18,6 +18,18 @@ describe('migration privilegi audit', () => {
     assert.match(sql, /grant select, insert on table public\.sector_pack_audit to service_role/);
     assert.doesNotMatch(sql, /grant [^;]*(update|delete|truncate|all)[^;]*sector_pack_audit/);
   });
+  test('sulle sette tabelle service_role perde solo i privilegi di struttura, mai quelli sui dati', () => {
+    assert.match(sql, /revoke %s on table public\.%i from service_role/);
+    assert.match(sql, /strutturali text := 'truncate, references, trigger'/);
+    const ciclo = sql.slice(sql.indexOf('foreach'));
+    assert.doesNotMatch(ciclo, /\b(select|insert|update|delete)\b[^;]*service_role/);
+    assert.doesNotMatch(ciclo, /revoke all on table public\.%i from service_role/);
+  });
+  test('MAINTAIN compatibile con Postgres 15, 16, 17: compare solo in una stringa costruita se server_version_num >= 170000', () => {
+    assert.match(sql, /server_version_num'\)::int >= 170000 then strutturali := strutturali \|\| ', maintain'/);
+    const fuori = sql.replace(/strutturali := strutturali \|\| ', maintain'/, '');
+    assert.doesNotMatch(fuori, /maintain/, 'MAINTAIN fuori dal ramo condizionato darebbe errore di sintassi su Postgres 15/16');
+  });
   test('nessun grant verso anon o authenticated, nessuna policy permissiva', () => {
     assert.doesNotMatch(sql, /grant [^;]* to [^;]*\b(anon|authenticated|public)\b/);
     assert.doesNotMatch(sql, /create policy/);
@@ -25,6 +37,18 @@ describe('migration privilegi audit', () => {
   test('tocca soltanto le otto tabelle riservate al servizio', () => {
     for (const t of ['agent_registry', 'clienti', 'jarvis_summaries', 'sector_eval_runs', 'sector_faq', 'sector_profiles', 'sector_test_scenarios']) assert.ok(sql.includes(`'${t}'`), t);
     assert.doesNotMatch(sql, /drop |delete from|truncate |update /);
+  });
+});
+
+describe('test pgTAP sulle sette tabelle', () => {
+  const t = leggi('supabase/tests/database/service_role_tables.sql');
+  test('il piano dichiarato coincide con i controlli (47) e copre tutte e sette le tabelle', () => {
+    assert.match(t, /select plan\(47\);/);
+    for (const x of ['agent_registry', 'clienti', 'jarvis_summaries', 'sector_eval_runs', 'sector_faq', 'sector_profiles', 'sector_test_scenarios']) assert.ok(t.includes(`'${x}'`), x);
+    assert.match(t, /'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'/);
+    assert.match(t, /has_table_privilege\('service_role', 'public\.' \|\| t, 'SELECT'\)/);
+    assert.match(t, /sector_faq', 'DELETE'/);
+    assert.match(t, /sector_test_scenarios', 'DELETE'/);
   });
 });
 

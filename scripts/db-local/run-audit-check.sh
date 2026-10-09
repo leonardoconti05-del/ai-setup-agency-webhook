@@ -14,7 +14,7 @@ $P -f scripts/db-local/pgtap-shim.sql
 $P -c "set role postgres" -f migrations/016_sector_pack_audit.sql >/dev/null
 # I test chiudono con ROLLBACK: i risultati si leggono PRIMA di finish(), nella stessa transazione.
 risultati() {
-  for f in supabase/tests/database/audit_privileges.sql supabase/tests/database/default_privileges.sql; do
+  for f in supabase/tests/database/audit_privileges.sql supabase/tests/database/service_role_tables.sql supabase/tests/database/default_privileges.sql; do
     sed -e 's/^select \* from finish();$/select n, case when ok then $$ok$$ else $$NOT OK$$ end as esito, descr, coalesce(detail,$$$$) as dettaglio from tap.res order by n;/' "$f" | psql -qX -At -F ' | ' -d $DB 2>&1 | grep -E '^[0-9]+ \|' || true
   done
 }

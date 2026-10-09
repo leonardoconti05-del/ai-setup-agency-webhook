@@ -9,17 +9,25 @@
 -- EFFETTO:
 --  1) sector_pack_audit: anon e authenticated senza alcun privilegio; service_role solo SELECT e INSERT.
 --  2) agent_registry, clienti, jarvis_summaries, sector_eval_runs, sector_faq, sector_profiles, sector_test_scenarios:
---     tolti TUTTI i privilegi ad anon e authenticated. Oggi avevano solo privilegi di struttura (TRUNCATE, REFERENCES,
---     TRIGGER, MAINTAIN) e nessun privilegio di lettura/scrittura, quindi il comportamento dell'applicazione non cambia:
---     il codice (api/, lib/) usa soltanto la chiave service_role (verificato con grep).
+--     a) anon e authenticated: tolti TUTTI i privilegi. Oggi avevano solo privilegi di struttura (TRUNCATE, REFERENCES,
+--        TRIGGER, MAINTAIN) e nessun privilegio di lettura/scrittura, quindi il comportamento dell'applicazione non cambia:
+--        il codice (api/, lib/) usa soltanto la chiave service_role (verificato con grep).
+--     b) service_role: tolti SOLO i privilegi di struttura TRUNCATE, REFERENCES, TRIGGER e, dove esiste (Postgres >= 17),
+--        MAINTAIN. I privilegi sui dati (SELECT/INSERT/UPDATE/DELETE) NON vengono toccati: il backend ne ha bisogno
+--        (es. lib/admin/pack-pipeline.js fa DELETE su sector_faq e sector_test_scenarios).
+--        Verificato su relacl di produzione il 9/10/2026: service_role aveva arwdDxtm (jarvis_summaries arwDxtm, senza DELETE).
 --  Nessuna policy RLS viene aggiunta: RLS attivo e nessuna policy = nessun accesso per anon/authenticated, voluto.
 -- PRECONDIZIONI: ruolo postgres (SQL editor di Supabase). Nessun dato letto o modificato.
--- IDEMPOTENTE: rilanciabile senza effetti collaterali. Funziona su Postgres 15-17 (REVOKE ALL include MAINTAIN dove esiste).
+-- IDEMPOTENTE: rilanciabile senza effetti collaterali. Funziona su Postgres 15, 16 e 17: MAINTAIN compare nel comando solo se server_version_num >= 170000
+-- (su 15/16 la parola darebbe errore di sintassi), e la stringa è costruita a runtime, quindi non viene mai analizzata sulle versioni vecchie.
 -- ROLLBACK (riporta ai privilegi di prima, sconsigliato):
 --   grant truncate, references, trigger on table public.sector_pack_audit to anon, authenticated, service_role;
+--   (e, per le sette tabelle: grant truncate, references, trigger [, maintain su PG17] on table public.<tabella> to service_role;)
 do $$
-declare t text;
+declare t text; strutturali text := 'truncate, references, trigger';
 begin
+  if current_setting('server_version_num')::int >= 170000 then strutturali := strutturali || ', maintain'; end if;
+
   if to_regclass('public.sector_pack_audit') is not null then
     revoke all on table public.sector_pack_audit from anon, authenticated;
     revoke all on table public.sector_pack_audit from service_role;
@@ -30,6 +38,7 @@ begin
   loop
     if to_regclass('public.' || t) is not null then
       execute format('revoke all on table public.%I from anon, authenticated', t);
+      execute format('revoke %s on table public.%I from service_role', strutturali, t);
     end if;
   end loop;
 end $$;
