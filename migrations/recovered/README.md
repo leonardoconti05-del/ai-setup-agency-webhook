@@ -15,6 +15,9 @@ Per ricostruire un ambiente da zero l'ordine corretto è quello della versione (
 | 20261006164530 | tenant_aware_rls_boundary | e650282bd31b239daf5c0f9697327634 |
 | 20261007095900 | emergency_escalation_action | 6b9ccab98f4bf1affb95458f337471cb |
 
+## Schema di base ricostruito (non è testo originale)
+`20260901000000_baseline_schema_ricostruito.sql` crea le sette tabelle di base (`clienti`, `configurazioni_cliente`, `jarvis_summaries`, `richieste_clienti`, `richieste_pazienti`, `utilizzo_mensile`, `whatsapp_conversations`) che non hanno nessun file di creazione né voce nella cronologia (le migration 001-003 citate in `docs/DECISIONS.md` non esistono). È stato **ricostruito dal catalogo di produzione, in sola lettura e senza dati**: non ha MD5 di riferimento perché il testo originale è perso. Serve solo a ricostruire un ambiente di TEST (vedi `scripts/db-test/README.md`). Mai sulla produzione.
+
 Il caso opposto (file nel repo, oggetti presenti nel database, ma assenti dalla cronologia perché applicati a mano) riguarda
 `004_observability`, `010_sector_engine`, `011_hardening_search_path`, `012_governance`, `013_grants_service_role`,
 `014_lacune_conoscenza`, `016_sector_pack_audit`: vedi docs/AUDIT_FASE1.md.

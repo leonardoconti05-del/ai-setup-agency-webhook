@@ -53,6 +53,27 @@ describe('test pgTAP sulle sette tabelle', () => {
   });
 });
 
+describe('ricostruzione del database di test', () => {
+  test('baseline ricostruita: dichiarata come tale, solo struttura, mai da usare in produzione', () => {
+    const b = leggi('migrations/recovered/20260901000000_baseline_schema_ricostruito.sql');
+    assert.match(b, /RICOSTRUITO \(non è il testo originale\)/);
+    assert.match(b, /NON ESEGUIRLO sul database di produzione/);
+    assert.doesNotMatch(senzaCommenti(b).replace(/\$function\$[\s\S]*?\$function\$/g, ''), /\b(insert into|update |delete from|drop |truncate )/); // il corpo della funzione non viene eseguito alla creazione
+    for (const t of ['clienti', 'configurazioni_cliente', 'jarvis_summaries', 'richieste_clienti', 'richieste_pazienti', 'utilizzo_mensile', 'whatsapp_conversations']) assert.ok(b.includes(`public.${t}`), t);
+  });
+  test('tenant_isolation è autosufficiente: crea due tenant nella transazione e dichiara un piano coerente', () => {
+    const t = leggi('supabase/tests/database/tenant_isolation.sql');
+    assert.match(t, /insert into public\.clienti/);
+    assert.match(t, /select plan\(9\);/);
+    assert.match(t, /rollback;/);
+    assert.doesNotMatch(t, /order by cliente_id limit 1/, 'non deve dipendere da righe già presenti');
+  });
+  test('script e documentazione per eseguire i test senza la CLI', () => {
+    for (const f of ['scripts/db-test/README.md', 'scripts/db-test/pgtap-come-do-block.py', 'scripts/db-test/00_allineamento_profilo_produzione.sql']) assert.ok(existsSync(new URL(`../${f}`, import.meta.url)), f);
+    assert.doesNotMatch(leggi('scripts/db-test/00_allineamento_profilo_produzione.sql'), /\bdrop\b|truncate/i);
+  });
+});
+
 describe('privilegi predefiniti e proposta pgvector', () => {
   test('privilegi predefiniti: revoca sia al livello dello schema sia al livello globale', () => {
     const sql = senzaCommenti(leggi('migrations/20261009040100_default_privileges_hardening.sql'));

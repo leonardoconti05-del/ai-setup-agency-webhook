@@ -129,19 +129,25 @@ Problemi trovati: (a) indice ivfflat con `lists=100` creato su tabella vuota: pg
 
 ## 7. Modifiche e test (risultati reali)
 
-File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (19 test), questo documento.
+File: 3 migration (`migrations/20261009040000_*`, `…040100_*`) + 1 proposta (`migrations/proposte/…040200_*`), 6 file in `migrations/recovered/`, 3 test pgTAP (`supabase/tests/database/audit_privileges.sql`, `service_role_tables.sql`, `default_privileges.sql`), `scripts/db-local/` (prova locale), `tests/audit-fase1.test.js` (22 test), questo documento.
 
 Esiti separati per tipo di esecuzione (non vanno sommati né confusi):
 
 | Tipo | Che cosa | Esito |
 |---|---|---|
-| **Locale, reale** | Suite Node completa (`npm test`) su questo branch | 382/382 (main + 19 nuovi); `tests/audit-fase1.test.js`: 19/19 |
-| **Locale, simulato** | Postgres 16 con stato di produzione riprodotto (fixture) e shim al posto di pgTAP: esegue i 3 file pgTAP = 17 + 54 + 6 = 77 controlli | prima delle migration 39 su 77 falliscono; dopo 77/77; seconda esecuzione senza errori (idempotenza); variante ipotetica con voce globale: 77/77; variante con PUBLIC introdotto apposta: 6 controlli falliscono come previsto |
-| **CI GitHub** | workflow `test` e `database-tests` sul commit della PR | verdi, **ma** il passo pgTAP del job `pgtap` è «skipped» (nessun segreto `SUPABASE_DB_URL`): il verde non prova nulla sul database |
-| **pgTAP vero su database Supabase di test** | `supabase test db` sui 4 file di `supabase/tests/database/` | **NON ESEGUITO** (bloccato dalla configurazione, sezione 8-bis) |
-| **Letture di produzione** | `relacl`, `pg_default_acl`, `pg_auth_members`, `aclexplode` (anche per PUBLIC) | sola lettura, nessuna modifica |
+| **Locale, reale** | Suite Node completa (`npm test`) su questo branch | 385/385 (main + 22 nuovi); `tests/audit-fase1.test.js`: 22/22 |
+| **Locale, simulato** | Postgres 16 con stato di produzione riprodotto (fixture) e shim al posto di pgTAP: 3 file pgTAP = 17 + 54 + 6 = 77 controlli | prima delle migration 39 su 77 falliscono; dopo 77/77; seconda esecuzione senza errori; variante con voce globale: 77/77; variante con PUBLIC introdotto apposta: 6 controlli falliscono come previsto |
+| **pgTAP vero, database di TEST Supabase (PostgreSQL 17.11)** | I 4 file di `supabase/tests/database/` eseguiti con la vera libreria pgTAP, come blocco SQL annullato a fine esecuzione (`scripts/db-test/pgtap-come-do-block.py`), dopo aver ricostruito lo schema e applicato le due migration della PR | **86/86 ok**: `audit_privileges` 17/17, `service_role_tables` 54/54, `default_privileges` 6/6, `tenant_isolation` 9/9. Ripetizione delle due migration sul test: nessun errore (ramo MAINTAIN di PostgreSQL 17 eseguito per la prima volta). Database di test verificato pulito dopo i test (0 clienti, 0 righe di audit) |
+| **CI GitHub** | workflow `test` e `database-tests` sul commit della PR | verdi, **ma** il passo pgTAP del job `pgtap` è ancora «skipped» (segreto `SUPABASE_DB_URL` non configurato): la CI non ha eseguito pgTAP |
+| **Letture di produzione** | `relacl`, `pg_default_acl`, `aclexplode`, catalogo delle sette tabelle di base | sola lettura, nessuna modifica |
 
-Limiti: Postgres 16 in locale, quindi il ramo `server_version_num >= 170000` (MAINTAIN) non è stato eseguito; fixture riprodotta e non il database reale; la proposta pgvector non è provata; nulla è stato applicato su Supabase.
+Limiti: i pgTAP veri sono stati eseguiti **via SQL sul progetto di test, non con `supabase test db` né in CI**. Il database di test è una ricostruzione (sette tabelle di base ricreate dal catalogo di produzione: vedi `scripts/db-test/README.md`), con struttura, policy e privilegi identici alla produzione ma senza dati; il corpo delle funzioni e le sequenze non sono stati confrontati. La proposta pgvector non è provata. Nulla è stato applicato in produzione.
+
+### Trovato durante la ricostruzione del test
+1. **Mancano 3 migration di base** (001-003): sette tabelle (`clienti`, `configurazioni_cliente`, `jarvis_summaries`, `richieste_clienti`, `richieste_pazienti`, `utilizzo_mensile`, `whatsapp_conversations`) e la funzione `incrementa_utilizzo_mensile` non hanno alcun file né voce nella cronologia: senza ricostruzione un ambiente nuovo non nasce. Aggiunta `migrations/recovered/20260901000000_baseline_schema_ricostruito.sql` (ricostruita dal catalogo, non testo originale).
+2. **`tenant_isolation.sql` non era autosufficiente**: leggeva un tenant già presente in `configurazioni_cliente`; su un database vuoto il controllo «sees its own configuration» falliva e gli altri passavano a vuoto. Riscritto: crea due tenant di prova nella transazione e aggiunge il controllo sulle policy d'azione (9 controlli).
+3. **Un progetto Supabase nuovo concede più privilegi della produzione** (default `arwdDxtm` ad anon/authenticated/service_role su ogni tabella, contro `Dxtm` della produzione): in produzione qualcuno li ha già ridotti. Le migration della PR tolgono solo la struttura; i privilegi sui dati dei ruoli API per le tabelle nuove dipendono dal default del progetto e dall'RLS. Per il test li ho riportati al profilo di produzione (`scripts/db-test/00_allineamento_profilo_produzione.sql`).
+4. Il connettore usato per applicare le migration blocca come distruttivi i `drop trigger/policy`: omessi nel test (su database vuoto non fanno nulla).
 
 ## 8. Applicazione manuale (SQL editor di Supabase, ruolo postgres)
 
@@ -157,27 +163,25 @@ select grantee::regrole, privilege_type from aclexplode((select relacl from pg_c
 
 Prova end-to-end del RAG (da fare con un tenant di prova, mai con un cliente): caricare un documento breve da `/api/knowledge`; verificare 1 riga in `documents` e ≥1 in `knowledge_chunks` con `embedding` non nullo; inviare su WhatsApp una domanda che solo quel documento può risolvere; controllare nel log `knowledge_base` `trovato=true` e `hitCount>0`; ripetere con un secondo tenant e verificare `hitCount=0` per quella domanda; eliminare il documento e verificare che i chunk spariscano.
 
-## 8-bis. Database di test per pgTAP (cosa deve configurare il titolare)
+## 8-bis. Database di test per pgTAP in CI (cosa resta al titolare)
 
-**Perché il passo è «skipped»** [V: `.github/workflows/database-tests.yml`]: il passo «Run pgTAP against configured database» ha la condizione `env.SUPABASE_DB_URL != ''`, e la variabile viene dal segreto `secrets.SUPABASE_DB_URL`, che nel repository **non esiste**. Il job risulta quindi verde senza eseguire nulla: un verde che non prova niente. Nel workflow ho aggiunto: (a) un rifiuto esplicito se l'URL contiene il riferimento del progetto di produzione; (b) per il caso «segreto assente», un `::warning` e un riepilogo del job che dicono chiaramente che i test non sono stati eseguiti. Il valore del segreto non viene mai stampato. Resta verde (per non bloccare le PR di chi non ha un database di test), ma non più in silenzio.
+**Perché il passo CI è «skipped»** [V: `.github/workflows/database-tests.yml`]: ha la condizione `env.SUPABASE_DB_URL != ''` e la variabile viene dal segreto `secrets.SUPABASE_DB_URL`, che nel repository non esiste. Il workflow ora rifiuta l'URL della produzione, non stampa mai il valore e, senza segreto, mostra un avviso e un riepilogo «pgTAP NON eseguito».
 
-**Cosa non posso fare io**: creare il database di test e il segreto. Non ho inventato né impostato nulla.
+**Stato**: il progetto Supabase di test `ai-setup-agency-test` (PostgreSQL 17, regione eu-west-1) è stato creato dal titolare; schema ricostruito e due migration della PR applicate; pgTAP già verificato via SQL (86/86, vedi sezione 7). Manca solo il collegamento della CI.
 
-**Cosa deve fare il titolare**
-1. Creare un progetto Supabase **separato da quello di produzione** (o un branch di database), solo per i test. Mai la produzione.
-2. Portarlo allo stesso schema del repository, cioè applicare in ordine tutte le migration di `migrations/` (comprese `migrations/recovered/`, che contengono la barriera di isolamento tenant e `enable_pgtap_testing`), poi `20261009040000` e `20261009040100`. Non applicare `migrations/proposte/`. Senza questo i test falliscono per tabelle mancanti, non per difetti reali.
-3. Verificare che l'estensione `pgtap` sia attiva sul database di test (la migration `enable_pgtap_testing`).
-4. In GitHub: Settings → Secrets and variables → Actions → New repository secret, nome `SUPABASE_DB_URL`, valore = stringa di connessione Postgres del **database di test** (utente `postgres`; con GitHub Actions di solito serve la connessione del pooler in modalità sessione, perché la connessione diretta è solo IPv6). Il segreto non è disponibile alle PR da fork.
-5. Rilanciare il job `pgtap` (Actions → database-tests → Run workflow) e controllare che il passo «Run pgTAP against configured database» NON sia «skipped» e che i file `audit_privileges`, `service_role_tables`, `default_privileges`, `tenant_isolation` risultino eseguiti.
-
-**Stato**: bloccato dalla configurazione. Finché non è fatto, nessun test pgTAP è stato eseguito su un database Supabase. Quanto sopra non è una prova superata.
+**Cosa deve fare il titolare** (non posso farlo io: serve la password del database, che non ho e non devo avere)
+1. Supabase → progetto **ai-setup-agency-test** → Connect → «Session pooler» (compatibile con GitHub Actions) → copiare la stringa di connessione e sostituire la password con quella del database di test. Verificare che il progetto sia quello di test e non quello di produzione.
+2. GitHub → repository → Settings → Secrets and variables → Actions → New repository secret: nome `SUPABASE_DB_URL`, valore = quella stringa.
+3. Actions → «database-tests» → Run workflow (sul branch della PR).
+4. Controllare che il passo «Run pgTAP against configured database» **non** sia «skipped» e che i 4 file risultino eseguiti. Se qualcosa fallisce in CI ma non via SQL, dirmelo con il log: la differenza (es. ruolo di connessione) va indagata.
+Avvertenza: `supabase test db` esegue i file direttamente; i test chiudono con `rollback`, ma l'audit append-only e la protezione del database di test valgono solo se il segreto punta davvero al test.
 
 ## 9. Verifiche per un revisore indipendente prima di merge e deployment
 
 1. Rieseguire la query ACL della sezione 8 e confrontare la tabella della sezione 2.
 2. Eseguire `scripts/db-local/run-audit-check.sh` su un Postgres locale e controllare che «prima» fallisca e «dopo» passi.
 3. Verificare con `grep` che `api/` e `lib/` non usino mai la chiave anon (`grep -rn "ANON\|anon" api lib`): la revoca presuppone che sia così.
-4. Configurare `SUPABASE_DB_URL` di un database **di test** (sezione 8-bis) e confermare che il job `pgtap` esegua i test (non "skipped").
+4. Collegare la CI al database di test (sezione 8-bis: segreto `SUPABASE_DB_URL`) e confermare che il job `pgtap` esegua i test (non "skipped"); controllare anche la sezione 7 («Trovato durante la ricostruzione del test»).
 5. Confrontare i sei file di `migrations/recovered/` con `supabase_migrations.schema_migrations` (MD5 nella README).
 6. Rileggere `20261009040100`: modifica i privilegi predefiniti, quindi le tabelle create in futuro non avranno TRUNCATE/REFERENCES/TRIGGER per i ruoli API.
 7. Per la v2 dei pack: i sei criteri della sezione 4, in particolare il giro reale su WhatsApp.
